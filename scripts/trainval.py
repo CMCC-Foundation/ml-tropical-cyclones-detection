@@ -11,7 +11,7 @@ import logging
 FORMATTED_DATETIME = str(datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
 MAIN_DIR = '../'
 DATA_DIR = join(MAIN_DIR, 'data/')
-BACKUP_DIR = join(MAIN_DIR, 'models/')
+MODEL_BACKUP_DIR = join(MAIN_DIR, 'models/')
 DATASET_DIR = join(DATA_DIR, 'tfrecords', 'trainval/')
 LIB_DIR = join(MAIN_DIR, 'lib/')
 
@@ -22,6 +22,7 @@ from models.setup import get_network_config, load_model
 from transform import coo_left_right, coo_up_down, coo_rot180, msk_left_right, msk_up_down, msk_rot180
 from macros import PatchType, Network, Losses, RegularizationStrength, Activation, LabelNoCyclone, AugmentationType
 from tfrecords.functions import read_tfrecord_as_tensor
+from macros import DRV_VARS_1, COO_VARS_1, MSK_VAR_1
 from tfrecords.dataset import eFlowsTFRecordDataset
 from strategy import get_mirrored_strategy
 from callbacks import ProcessBenchmark
@@ -41,18 +42,18 @@ def trainval(args):
 
     # CLI argument parsing
     regularization_strength, regularizer = [rg.value for rg in RegularizationStrength if rg.name.lower() == args.regularization_strength][0]
-    experiment, (drv_vars, coo_vars, msk_var, channels) = [e.value for e in Experiment if e.name.lower() == args.experiment][0]
+    experiment, (drv_vars, coo_vars, msk_var, channels) = 'default', (DRV_VARS_1, COO_VARS_1, MSK_VAR_1, [len(DRV_VARS_1), len(COO_VARS_1)])
     loss_name, loss = [l.value for l in Losses if l.name.lower() == args.loss][0]
     label_no_cyclone = args.label_no_cyclone
     shuffle_buffer = args.shuffle_buffer
     learning_rate = args.learning_rate
     target_scale = args.target_scale
+    model_backup = args.model_backup
     kernel_size = args.kernel_size
     batch_size = args.batch_size
     patch_type = args.patch_type
     activation = args.activation
     augment = args.augmentation
-    model_backup = args.backup
     run_name = args.run_name
     aug_type = args.aug_type
     network = args.network
@@ -86,10 +87,7 @@ def trainval(args):
 
     # files and csvs definition
     LOG_FILE = join(RUN_DIR,'run.log')
-    if network == Network.PIX2PIX.value:
-        CHECKPOINTS_FILEPATH = join(CHECKPOINTS_DIR, 'weights_{epoch:02d}.h5')
-    else:
-        CHECKPOINTS_FILEPATH = join(CHECKPOINTS_DIR, 'model_{epoch:02d}.h5')
+    CHECKPOINTS_FILEPATH = join(CHECKPOINTS_DIR, 'model_{epoch:02d}.h5')
     PATH_HYPERPARAMETERS_CSV = join(EXPERIMENTS_DIR, 'models_hyperparameters.csv')
     LOSS_METRICS_HISTORY_CSV = join(RUN_DIR, 'loss_metrics_history.csv')
     BENCHMARK_HISTORY_CSV = join(RUN_DIR, 'benchmark_history.csv')
@@ -145,7 +143,7 @@ def trainval(args):
         ]
     last_model_name = join(RUN_DIR, 'last_model.h5')
     if model_backup:
-        best_model_name = join(BACKUP_DIR, model_backup, 'best_model.h5')
+        best_model_name = join(MODEL_BACKUP_DIR, model_backup, 'best_model.h5')
 
     # log
     logging.debug(f'Program started')
@@ -221,11 +219,7 @@ def trainval(args):
     logging.debug(f'Train, valid and test datasets loaded.')
 
     # append the Model Checkpoint Callback to our callbacks
-    if network == Network.PIX2PIX.value:
-        # if model is pix2pix we cannot save entire model
-        model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(filepath=CHECKPOINTS_FILEPATH, save_best_only=True, monitor='val_gen_l1_loss', mode='min', save_weights_only=True, verbose=1)
-    else:
-        model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(filepath=CHECKPOINTS_FILEPATH, save_best_only=True, monitor='val_loss', mode='min', save_weights_only=False, verbose=1)
+    model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(filepath=CHECKPOINTS_FILEPATH, save_best_only=True, monitor='val_loss', mode='min', save_weights_only=False, verbose=1)
     callbacks.append(model_checkpoint_callback)
 
     get_time.start(train_timer)
@@ -255,12 +249,8 @@ def trainval(args):
 
 
         # IMPORTANTE : le metriche vanno istanziate all'interno dello stesso scope di distribuzione (MirroredStrategy) in cui viene chiamata la model.compile()
-        if network == Network.PIX2PIX.value:
-            model.compile()
-            model.built = True
-        else:
-            metrics = [tf.keras.metrics.MeanAbsoluteError(name='mae')]
-            model.compile(loss=loss, optimizer=optimizer, metrics=metrics)
+        metrics = [tf.keras.metrics.MeanAbsoluteError(name='mae')]
+        model.compile(loss=loss, optimizer=optimizer, metrics=metrics)
         
     # log
     logging.debug(f'Model compiled')
@@ -285,10 +275,7 @@ def trainval(args):
     get_time.start(io_timer)
 
     # save the best model
-    if network == Network.PIX2PIX.value:
-        model.save_weights(last_model_name) # custom models must be saved as weights
-    else:
-        model.save(last_model_name)
+    model.save(last_model_name)
 
     # log
     logging.debug(f'Saved training history')
@@ -325,7 +312,7 @@ if __name__ == "__main__":
     
     # OPTIONAL ARGUMENTS
     parser.add_argument( "-rn", "--run_name", default='debug', help="Name to be assigned to the run", required=False)
-    parser.add_argument( "-tm", "--trained_model", default=None, help="The filepath to a trained model to be loaded", required=False)
+    parser.add_argument( "-mb", "--model_backup", default=None, help="The filepath to a trained model to be loaded", required=False)
     parser.add_argument( "-ks", "--kernel_size", default=None, type=int, help="Kernel size (only for Model V5)", required=False)
     parser.add_argument( "-s", "--shuffle", default='False', help="Number of consecutive samples to be shuffled", required=False)
     parser.add_argument( "-a", "--augmentation", default='True', help="Whether or not to perform data augmentation", required=False)
@@ -343,7 +330,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if args.backup is not None and not exists(join(BACKUP_DIR, args.backup)):
+    if args.model_backup is not None and not exists(join(MODEL_BACKUP_DIR, args.model_backup)):
         raise FileNotFoundError('Model backup file not found')
 
     if args.shuffle == 'True':
