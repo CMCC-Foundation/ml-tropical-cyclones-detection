@@ -11,7 +11,7 @@ import logging
 FORMATTED_DATETIME = str(datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
 MAIN_DIR = '../'
 DATA_DIR = join(MAIN_DIR, 'data/')
-BACKUP_DIR = join(MAIN_DIR, 'backup/')
+BACKUP_DIR = join(MAIN_DIR, 'models/')
 DATASET_DIR = join(DATA_DIR, 'tfrecords', 'trainval/')
 LIB_DIR = join(MAIN_DIR, 'lib/')
 
@@ -20,7 +20,7 @@ sys.path.append(LIB_DIR)
 from macros import PATCH_SIZE as patch_size, SHAPE as shape
 from models.setup import get_network_config, load_model
 from transform import coo_left_right, coo_up_down, coo_rot180, msk_left_right, msk_up_down, msk_rot180
-from macros import PatchType, Network, Losses, Experiment, RegularizationStrength, Activation, LabelNoCyclone, AugmentationType
+from macros import PatchType, Network, Losses, RegularizationStrength, Activation, LabelNoCyclone, AugmentationType
 from tfrecords.functions import read_tfrecord_as_tensor
 from tfrecords.dataset import eFlowsTFRecordDataset
 from strategy import get_mirrored_strategy
@@ -322,11 +322,10 @@ if __name__ == "__main__":
     # REQUIRED ARGUMENTS
     parser.add_argument( "-bs", "--batch_size", type=int, help="Global batch size of data", required=True)
     parser.add_argument( "-e", "--epochs", type=int, help="Number of epochs through which the model must be trained", required=True)
-    parser.add_argument( "-ex", "--experiment", choices=[e.value[0] for e in Experiment], help="The variable's configuration in this execution", required=True)
     
     # OPTIONAL ARGUMENTS
     parser.add_argument( "-rn", "--run_name", default='debug', help="Name to be assigned to the run", required=False)
-    parser.add_argument( "-b", "--backup", default=None, help="The filepath to a trained model to be loaded", required=False)
+    parser.add_argument( "-tm", "--trained_model", default=None, help="The filepath to a trained model to be loaded", required=False)
     parser.add_argument( "-ks", "--kernel_size", default=None, type=int, help="Kernel size (only for Model V5)", required=False)
     parser.add_argument( "-s", "--shuffle", default='False', help="Number of consecutive samples to be shuffled", required=False)
     parser.add_argument( "-a", "--augmentation", default='True', help="Whether or not to perform data augmentation", required=False)
@@ -336,7 +335,7 @@ if __name__ == "__main__":
     parser.add_argument( "-ts", "--target_scale", default='False', choices=['True','False'], help="Whether or not to scale the target", required=False)
     parser.add_argument( "-l", "--loss", default=Losses.MAE.value[0], choices=[l.value[0] for l in Losses], help="Loss function to be applied", required=False)
     parser.add_argument( "-n", "--network", default=Network.VGG_V1.value, choices=[n.value for n in Network], help="Neural network used to train the model", required=False)
-    parser.add_argument( "-ac", "--activation", default=Activation.LINEAR.value, choices=[a.value for a in Activation], help="The label assigned to the cyclone", required=False)
+    parser.add_argument( "-ac", "--activation", default=Activation.LINEAR.value, choices=[a.value for a in Activation], help="Last layer activation function", required=False)
     parser.add_argument( "-at", "--aug_type", default=AugmentationType.ONLY_TCS.value, choices=[at.value for at in AugmentationType], help="Type of augmentation", required=False)
     parser.add_argument( "-pt", "--patch_type", default=PatchType.NEAREST.value, choices=[pt.value for pt in PatchType], help="Type of patches used during training", required=False)
     parser.add_argument( "-lc", "--label_no_cyclone", default=str(LabelNoCyclone.NONE.value), choices=[str(lnc.value) for lnc in LabelNoCyclone], help="The label assigned to the cyclone", required=False)

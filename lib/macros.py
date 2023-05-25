@@ -22,25 +22,6 @@ DRV_VARS_1 = ['fg10', 'msl', 't_500', 't_300']
 COO_VARS_1 = ['patch_cyclone']
 MSK_VAR_1 = None
 
-# ESPERIMENTI TIPO 2
-# variabili per la seconda parte degli esperimenti (segmentazione ma con le stesse variabili dell'esperimento 1)
-DRV_VARS_2 = ['fg10', 'msl', 't_500', 't_300']
-COO_VARS_2 = None
-MSK_VAR_2 = 'cyclone_mask'
-
-# ESPERIMENTI TIPO 3
-# tutti i driver (tranne sst) per il task di regressione
-DRV_VARS_3 = ['fg10', 'i10fg', 'msl', 't_500', 't_300', 'vo_850']
-COO_VARS_3 = ['patch_cyclone']
-MSK_VAR_3 = None
-
-# ESPERIMENTI TIPO 4
-# tutti i driver dell'esperimento 3, ma applicati al task di segmentazione
-DRV_VARS_4 = ['fg10', 'i10fg', 'msl', 't_500', 't_300', 'vo_850']
-COO_VARS_4 = None
-MSK_VAR_4 = 'cyclone_mask'
-
-
 # dataset parameters
 PATCH_SIZE = 40
 SHAPE = (PATCH_SIZE, PATCH_SIZE)
@@ -74,11 +55,7 @@ class Network(Enum):
     VGG_V1 = 'vgg_v1'       # map-to-coord
     VGG_V2 = 'vgg_v2'       # map-to-coord
     VGG_V3 = 'vgg_v3'       # map-to-coord
-    VGG_V4 = 'vgg_v4'       # map-to-coord
     MODEL_V5 = 'model_v5'   # map-to-coord
-    UNET = 'unet'           # map-to-map
-    UNETPP = 'unetpp'       # map-to-map
-    PIX2PIX = 'pix2pix'     # map-to-map
 
 # ritorna nome della loss utilizzata in fase di training
 class Losses(Enum):
@@ -86,25 +63,8 @@ class Losses(Enum):
     MAE = ('mae', 'mae') 
     # Mean Squared Error
     MSE = ('mse', 'mse') 
-    # Cyclone Classification Localization
-    #CCL = ('ccl', CycloneClassificationLocalizationLoss(reduction=REDUCTION, name='ccl')) 
-    # Dice Loss
-    #DL = ('dice', DiceLoss(reduction=REDUCTION, name='dice'))
-    # Binary CrossEntropy + Dice Coefficient
-    #BCEDL = ('bce_dice', BCEDiceLoss(reduction=REDUCTION, name='bce_dice')) 
-    # Binary CrossEntropy
-    BCE = ('bce', tf.keras.losses.BinaryCrossentropy(reduction=REDUCTION, name='bce')) 
-    # Sparse Categorical CrossEntropy
-    SCCE = ('scce', tf.keras.losses.SparseCategoricalCrossentropy(reduction=REDUCTION, name='scce')) 
     # No specified loss
     NONE = ('none', None) 
-
-# descrive il tipo di esperimento che si tenta di eseguire
-class Experiment(Enum):
-    EXP_1 = ('exp_1', (DRV_VARS_1, COO_VARS_1, MSK_VAR_1, [len(DRV_VARS_1), 2]) )
-    EXP_2 = ('exp_2', (DRV_VARS_2, COO_VARS_2, MSK_VAR_2, [len(DRV_VARS_2), 1]) )
-    EXP_3 = ('exp_3', (DRV_VARS_3, COO_VARS_3, MSK_VAR_3, [len(DRV_VARS_3), 2]) )
-    EXP_4 = ('exp_4', (DRV_VARS_4, COO_VARS_4, MSK_VAR_4, [len(DRV_VARS_4), 1]) )
 
 # descrive la forza della regolarizzazione
 class RegularizationStrength(Enum):
