@@ -3,15 +3,14 @@
 The repository contains a Machine Learning (ML) library to configure and train a model 
 with the use of TFRecords Dataset.
 
-\textit{scripts} folder is the main source to launch training configurations. It contains:
+scripts folder is the main source to launch training configurations. It contains:
 
 • trainval.py - python script that contains the training-validation procedure that makes use of the provided TFRecords data. 
 
 • launcher.sh - bash script that launches a sample configuration of the training. It can 
 be customized according to the training preferences.
 
-To run a proof-of-concept training go to \textit{scripts} folder and launch 
-\textit{launcher.sh} bash script. 
+To run a proof-of-concept training go to \textit{scripts} folder and launch launcher.sh bash script. 
 
 The CLI arguments taken in input by trainval.py script are:
 
