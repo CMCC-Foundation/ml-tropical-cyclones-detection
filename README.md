@@ -1,7 +1,18 @@
 # Machine Learning Tropical Cyclones Detection
 
-The repository contains a Machine Learning (ML) library to configure and train a model 
-with the use of TFRecords Dataset.
+## Overview
+The repository provides a Machine Learning (ML) library to setup training and validation of a Tropical Cyclones (TCs) Detection model. ERA5 reanalysis and the International Best Track Archive for Climate Stewardship (IBTrACS) data are used as input and the target, respectively. Input-Output data pairs are provided as TFRecords.
+
+Input drivers:
+- 10m wind gust since previous post-processing [ms^{-1}]
+- mean sea level pressure [Pa]
+- temperature at 300 mb [K]
+- temperature at 500 mb [K]
+
+Target:
+- TC center row-column coordinates within the 40 x 40 pixels patch 
+
+## Code Structure
 
 _scripts_ folder is the main source to launch training configurations. It contains:
 
