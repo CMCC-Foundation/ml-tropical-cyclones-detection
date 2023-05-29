@@ -1,10 +1,17 @@
 # Machine Learning Tropical Cyclones Detection
 
+## Credit
+- Gabriele Accarino
+- Davide Donno
+- Francesco Immorlano
+- Donatello Elia
+- Giovanni Aloisio
+
 ## Overview
 The repository provides a Machine Learning (ML) library to setup training and validation of a Tropical Cyclones (TCs) Detection model. ERA5 reanalysis and the International Best Track Archive for Climate Stewardship (IBTrACS) data are used as input and the target, respectively. Input-Output data pairs are provided as TFRecords.
 
 Input drivers:
-- 10m wind gust since previous post-processing [ms^{-1}]
+- 10m wind gust since previous post-processing [ms**{-1}]
 - mean sea level pressure [Pa]
 - temperature at 300 mb [K]
 - temperature at 500 mb [K]
@@ -46,6 +53,7 @@ The CLI arguments taken in input by trainval.py script are:
 - -lc, --label_no_cyclone [Optional | Default: None] : The coordinate value assigned to indicate cyclone absence.
 - -rg, --regularization_strength [Optional | Default: 'none'] : Regularization strength. Possible values : weak, medium, strong, very_strong, none.
 
+## Python3 Environment 
 The code has been tested on Python 3.8.16 with the following dependencies:
 - keras=2.12.0
 - numpy=1.23.5
