@@ -8,7 +8,7 @@ _scripts_ folder is the main source to launch training configurations. It contai
 - trainval.py - python script that contains the training-validation procedure that makes use of the provided TFRecords data. 
 - launcher.sh - bash script that launches a sample configuration of the training. It can be customized according to the training preferences.
 
-To run a proof-of-concept training go to \textit{scripts} folder and launch launcher.sh bash script. 
+To run a proof-of-concept training go to _scripts_ folder and launch launcher.sh bash script. 
 
 The CLI arguments taken in input by trainval.py script are:
 - -bs, --batch_size : Global batch size of data.
