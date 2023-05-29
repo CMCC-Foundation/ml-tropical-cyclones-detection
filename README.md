@@ -14,22 +14,22 @@ Target:
 
 ## Code Structure
 
-_scripts_ folder is the main source to launch training configurations. It contains:
+The _trainval.py_ script allows running both training and validation on input data. The _data_ folder should be located at the same level of _lib_ and _scripts_ folders. 
 
-- trainval.py - python script that contains the training-validation procedure that makes use of the provided TFRecords data. 
-- launcher.sh - bash script that launches a sample configuration of the training. It can be customized according to the training preferences.
+Here is an example of training with a batch size of 512 over 3 epochs.
 
-Here is a proof-of-concept training example, that can be launched from _scripts/launcher.sh_:
 ```bash
+cd scripts
 python -u trainval.py --batch_size 512 --epochs 3
 ```
+The _trainval.py_ script takes advantage of the Command Line Interface (CLI) to get additional arguments that are useful for both training and validation of the model.
 
+A complete list of the available arguments is provided in the following:
 
 The CLI arguments taken in input by trainval.py script are:
 - -bs, --batch_size : Global batch size of data.
 - -e, --epochs : Number of epochs through which the model must be trained.
-
-- -rn, --run_name [optional | Default: 'debug'] : Name to be assigned to the trained model. 
+- -rn, --run_name [Optional | Default: 'debug'] : Name to be assigned to the trained model. 
 - -tm, --trained_model [Optional | Default: None]: The filepath to a trained model to be loaded (ONLY if we want to continue a training).
 - -ks, --kernel_size [Optional | Default: None] : Kernel size (only for Model V5 architecture). Possible values: 3,5,7,8,11,13. 
 - -s, --shuffle [Optional | Default: 'False'] : Whether to shuffle dataset TFRecords filenames.
