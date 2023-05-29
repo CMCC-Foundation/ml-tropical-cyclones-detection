@@ -37,8 +37,8 @@ The CLI arguments taken in input by trainval.py script are:
 - -c, --cores [Optional | Default: None] : Number of cores (for multicore CPUs. NOT designed for GPUs).
 - -sb, --shuffle_buffer [Optional | Default: None] :  Number of consecutive samples to be shuffled.
 - -lr, --learning_rate [Optional | Default: 0.0001] : Learning rate at which the model is trained.
-- -ts, --target_scale [Optional | Default: 'False'] : Whether or not to scale the target.
-- -l, --loss [Optional | Defualt: 'mae'] : Loss function to be applied. Possible values: mae, mse.
+- -ts, --target_scale [Optional | Default: 'False'] : Whether or not to scale the target.
+- -l, --loss [Optional | Defualt: 'mae'] : Loss function to be applied. Possible values: mae, mse.
 - -n, --network [Optional | Default: 'vgg_v1'] : Neural network used to train the model. Possible values: vgg_v1, vgg_v2, vgg_v3, model_v5.
 - -ac, --activation [Optional | Default: 'linear'] : Last layer activation function.
 - -at, --aug_type [Optional | Default: 'only_tcs'] : Type of augmentation. Possible values : only_tcs, all_patches.
