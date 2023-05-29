@@ -28,11 +28,12 @@ python -u trainval.py --batch_size 512 --epochs 3
 The CLI arguments taken in input by trainval.py script are:
 - -bs, --batch_size : Global batch size of data.
 - -e, --epochs : Number of epochs through which the model must be trained.
-- -rn, --run_name [optional] : Name to be assigned to the trained model. Default: 'debug'
-- -tm, --trained_model [optional]: The filepath to a trained model to be loaded (ONLY if we want to continue a training). Default: None
-- -ks, --kernel_size [optional] : Kernel size (only for Model V5 architecture). Possible values: 3,5,7,8,11,13. Default: None
-- -s, --shuffle [optional] : Whether to shuffle dataset TFRecords filenames. Default: 'False'
-- -a, --augmentation [optional] : Whether or not to perform data augmentation.
+
+- -rn, --run_name [optional | Default: 'debug'] : Name to be assigned to the trained model. 
+- -tm, --trained_model [Optional | Default: None]: The filepath to a trained model to be loaded (ONLY if we want to continue a training).
+- -ks, --kernel_size [Optional | Default: None] : Kernel size (only for Model V5 architecture). Possible values: 3,5,7,8,11,13. 
+- -s, --shuffle [Optional | Default: 'False'] : Whether to shuffle dataset TFRecords filenames.
+- -a, --augmentation [Optional | Default: None] : Whether or not to perform data augmentation.
 - -c, --cores [optional] : Number of cores (for multicore CPUs. NOT designed for GPUs).
 - -sb, --shuffle_buffer [optional] :  Number of consecutive samples to be shuffled.
 - -lr, --learning_rate [optional] : Learning rate at which the model is trained.
