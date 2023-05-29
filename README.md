@@ -46,6 +46,10 @@ The CLI arguments taken in input by trainval.py script are:
 - -lc, --label_no_cyclone [Optional | Default: None] : The coordinate value assigned to indicate cyclone absence.
 - -rg, --regularization_strength [Optional | Default: 'none'] : Regularization strength. Possible values : weak, medium, strong, very_strong, none.
 
-
-
-
+The code has been tested on Python 3.8.16 with the following dependencies:
+- keras=2.12.0
+- numpy=1.23.5
+- pandas=1.5.3
+- psutil=5.9.5
+- scikit-learn=1.2.2
+- tensorflow-macos=2.12.0
