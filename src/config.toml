@@ -13,7 +13,7 @@ seed = 42
 
 [data]
 patch_size = 40
-drivers = ['fg10', 'i10fg', 'msl', 't_500', 't_300', 'vo_850']
+drivers = ['fg10', 'msl', 't_500', 't_300']
 targets = ['patch_cyclone']
 drivers_shape = [40, 40]
 targets_shape = [2,]
@@ -21,7 +21,7 @@ patch_type = 'nearest'
 force_scaler_compute = true
 
 [model]
-network = "lb.models.VGG_V4(patch_size=40, channels=[6,2], initializer=tf.random_normal_initializer(0., 0.02), activation='relu', regularizer=None, kernel_size=3)"
+network = "lb.models.VGG_V1(patch_size=40, channels=[6,2], initializer=tf.random_normal_initializer(0., 0.02), activation='relu', regularizer=None, kernel_size=3)"
 loss = "tf.keras.losses.MeanAbsoluteError(name='mae')"
 optimizer = "tf.keras.optimizers.Adam(learning_rate=0.0001)"
 metrics = [
