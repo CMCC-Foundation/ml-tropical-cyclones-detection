@@ -1,7 +1,7 @@
 [dirs]
 main = '../'
 data = '../data/'
-models = '../backup/'
+model = '../backup/'
 experiments = '../experiments/'
 dataset = '../data/tfrecord/trainval/'
 scaler = '../data/scaler/'
