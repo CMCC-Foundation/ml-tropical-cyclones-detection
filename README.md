@@ -21,7 +21,7 @@ Target:
 
 ## Code Structure
 
-The train.py_ script (located in _src_ folder) allows running both training and validation on input data. The _data_ folder should be located at the same level of _resources_ and _src_ folders. 
+The _train.py_ script (located in _src_ folder) allows running both training and validation on input data. The _data_ folder should be located at the same level of _resources_ and _src_ folders. 
 
 Here is an example of training.
 
@@ -29,12 +29,13 @@ Here is an example of training.
 cd src
 python -u train.py --config config.toml
 ```
+
 The _train.py_ script takes advantage of the Command Line Interface (CLI) to pass a training configuration file (_config.toml_ in the example above) to the script that is useful for both training and validation of the model.
 
 The configuration file must be prepared in toml format. The configuration file is structured as follows:
 
 - dirs : directories
-    - main: relative path from training source file to repository folder (i.e., the one that contains the _src_, _data_, etc folders).
+    - main: relative path from training source file to repository folder (i.e., the one that contains the _src_, _data_, _resources_, etc folders).
     - data: relative path to _data_ folder.
     - model: the relative path to a trained model to be loaded (ONLY if we want to continue a training).
     - experiments: the relative path to the directory that will contain the output.
