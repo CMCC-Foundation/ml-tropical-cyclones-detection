@@ -111,6 +111,12 @@ ibtracs_1980_2020_date_unique_df = ibtracs_1980_2020_date_unique_df.sort_values(
 # Reset index
 ibtracs_1980_2020_date_unique_df = ibtracs_1980_2020_date_unique_df.reset_index(inplace=False, drop=True)
 
+# Select data in a range
+dtime_min = "1990-01-01"
+dtime_max = "1991-01-01"
+ibtracs_1980_2020_date_unique_df = ibtracs_1980_2020_date_unique_df[ibtracs_1980_2020_date_unique_df['ISO_TIME'] >= dtime_min]
+ibtracs_1980_2020_date_unique_df = ibtracs_1980_2020_date_unique_df[ibtracs_1980_2020_date_unique_df['ISO_TIME'] < dtime_max]
+
 ############################################# WORKFLOW #############################################
 variables_single_levels = ['instantaneous_10m_wind_gust',
                            'mean_sea_level_pressure',
