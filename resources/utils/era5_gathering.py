@@ -6,7 +6,7 @@ import os
 import shutil
 import cdsapi
 from datetime import timedelta
-
+import yaml
 
 
 def retrieve_era5_single_levels(client, out_dir, variables, south, north, west, east, year, month, day, time):
@@ -65,7 +65,14 @@ def retrieve_era5_pressure_levels(client, out_dir, variable, pressure_level, sou
 restart_idx = 0
 end_idx = 100000
 
-client = cdsapi.Client()
+# define CDS api client
+url = 'url'
+key = 'key'
+home_dir = os.path.expanduser("~")
+path_to_cdsapirc_file = os.path.join(home_dir, '.cdsapirc')
+with open(path_to_cdsapirc_file, 'r') as f:
+		credentials = yaml.safe_load(f)
+client = cdsapi.Client(url=credentials[url], key=credentials[key])
 
 path_ibtracs_1980_2020 = 'ibtracs_ALL.1980-2020_date_fields.csv'
 path_ERA5 = '../data/ERA5/'
