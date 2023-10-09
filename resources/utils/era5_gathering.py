@@ -107,7 +107,7 @@ ibtracs_1980_2020_date_unique_df = ibtracs_1980_2020_date_unique_df.reset_index(
 
 # Select data in a range
 dtime_min = "1990-01-01"
-dtime_max = "1991-01-13"
+dtime_max = "1991-07-01"
 ibtracs_1980_2020_date_unique_df = ibtracs_1980_2020_date_unique_df[ibtracs_1980_2020_date_unique_df['ISO_TIME'] >= dtime_min]
 ibtracs_1980_2020_date_unique_df = ibtracs_1980_2020_date_unique_df[ibtracs_1980_2020_date_unique_df['ISO_TIME'] < dtime_max]
 
