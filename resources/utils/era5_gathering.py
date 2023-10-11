@@ -60,8 +60,8 @@ restart_idx = 0
 end_idx = 100000
 
 # define CDS api client
-url = 'cds_url'
-key = 'cds_key'
+url = 'url'
+key = 'key'
 home_dir = os.path.expanduser("~")
 path_to_cdsapirc_file = os.path.join(home_dir, '.cdsapirc')
 with open(path_to_cdsapirc_file, 'r') as f:
@@ -107,7 +107,7 @@ ibtracs_1980_2020_date_unique_df = ibtracs_1980_2020_date_unique_df.reset_index(
 
 # Select data in a range
 dtime_min = "1990-01-01"
-dtime_max = "1991-07-01"
+dtime_max = "1990-07-01"
 ibtracs_1980_2020_date_unique_df = ibtracs_1980_2020_date_unique_df[ibtracs_1980_2020_date_unique_df['ISO_TIME'] >= dtime_min]
 ibtracs_1980_2020_date_unique_df = ibtracs_1980_2020_date_unique_df[ibtracs_1980_2020_date_unique_df['ISO_TIME'] < dtime_max]
 
