@@ -1,18 +1,20 @@
 # Machine Learning Tropical Cyclones Detection
 
 ## Credit
-- Gabriele Accarino
 - Davide Donno
+- Gabriele Accarino
 - Francesco Immorlano
 - Donatello Elia
 - Giovanni Aloisio
 
 ## Overview
-The repository provides a Machine Learning (ML) library to setup training and validation of a Tropical Cyclones (TCs) Detection model. ERA5 reanalysis and the International Best Track Archive for Climate Stewardship (IBTrACS) data are used as input and the target, respectively. Input-Output data pairs are provided as TFRecords.
+The repository provides a Machine Learning (ML) library to setup training and validation of a Tropical Cyclones (TCs) Detection model. ERA5 reanalysis and the International Best Track Archive for Climate Stewardship (IBTrACS) data are used as input and the target, respectively. Input-Output data pairs are provided as Zarr data stores.
 
 Input drivers:
-- 10m wind gust since previous post-processing [ms**{-1}]
+- 10m wind gust  [$\frac{m}{s}$]
+- 10m wind gust since previous post-processing [$\frac{m}{s}$]
 - mean sea level pressure [Pa]
+- relative vorticity at 850 mb [$s^{-1}$]
 - temperature at 300 mb [K]
 - temperature at 500 mb [K]
 
@@ -27,56 +29,83 @@ Here is an example of training.
 
 ```bash
 cd src
-python -u train.py --config config.toml
+python -u train.py --config config.toml --devices 1 --num_nodes 1
 ```
+The _train.py_ script takes advantage of the Command Line Interface (CLI) to pass additional arguments useful for both training and validation of the model. In particular:
 
-The _train.py_ script takes advantage of the Command Line Interface (CLI) to pass a training configuration file (_config.toml_ in the example above) to the script that is useful for both training and validation of the model.
+- `--config` specifies the path to the *config.toml* file where the training configuration is stored.
+- `--devices` argument defines the number of GPU devices per node to run the training on.
+- `--num_nodes` argument defines the total number of nodes that will be used.
 
-The configuration file must be prepared in toml format. The configuration file is structured as follows:
+The total number of GPUs used during the training can be evinced by simply multiplying `devices * num_nodes`.
 
-- dirs : directories
-    - main: relative path from training source file to repository folder (i.e., the one that contains the _src_, _data_, _resources_, etc folders).
-    - data: relative path to _data_ folder.
-    - model: the relative path to a trained model to be loaded (ONLY if we want to continue a training).
-    - experiments: the relative path to the directory that will contain the output.
-    - dataset: relative path to the direcotry that contains the dataset to be used during training
-    - scaler: relative path to the destination directory that will contain the scaler
-    - scaler_filename: output scaler filename
+With regards to the configuration file, it must be prepared in toml format. The configuration file is structured as follows:
 
-- run : run-specific arguments
-    - name: name of the run (i.e., the name of the output folder that will contain training results)
-    - seed: the seed of this training (to repeat experiments)
+- run : generic arguments
+    - seed: the seed of this training (for reproducibility purposes)
+
+- dir : directories
+    - experiment: path to store the current experiment
+    - train: path to the stored train patches
+    - valid: path to the stored valid patches
+    - run: name of the current experiment run
+    - scaler
+        - mean: path to mean netcdf
+        - std: path to standard deviation netcdf
+
+- torch: pytorch configuration arguments
+    - matmul_precision: set the precision of the matix multiplications
+    - dtype: data type that will be used for the data
+
+- lightning: pytorch-lightning configuration arguments
+    - accelerator: defines the hardware component that will be used during training (CPU, GPU, ecc)
+    - precision: precision of the internal computations during model training
+
+- model: defines arguments related to model initialization
+    - monitor: name of the loss to be monitored (for model checkpoints)
+    - cls: name of the class of the model (taken from `tropical_cyclone` library located in `resources/library/tropical_cyclone`)
+    - metrics: list of additional metrics to be computed during training
+    - args: dictionary of model arguments to be passed in `model.cls`
 
 - data : information to data provided as input
-    - patch_size: size of an input patch.
     - drivers: list of variables that will be used as input during training.
     - targets: list of variables that will be used as output during training.
-    - drivers_shape: shape of the input drivers (it should always be equal to [patch_size, patch_size]).
-    - targets_shape: shape of the output variables (since we have to predict row-col coordinates it should always be equal to [2,]).
-    - patch_type: type of patches that will be used during training (it can only assume value _nearest_ or _alladjacent_)-
-    - force_scaler_compute: boolean that indicates whether or not to force the scaler computation even if it has already been previously computed.
+    - label_no_cyclone: label applied to indicate the absence of a TC in the patch
 
-- model: parameters related to the model configuration
-    - network: string embedding a Python code that loads a model from the library
-    - loss: string embedding a Python code that loads a Tensorflow loss function
-    - optimizer: string embedding a Python code that loads a Tensorflow optimizer function
-    - metrics: list of strings embedding Python codes that load Tensorflow metrics functions
-    - callbacks: list of strings embedding Python codes that load Tensorflow (or custom) callback functions
+- loss: informations about loss function
+    - cls: class name of the loss function
+    - args: arguments passed to the loss (can be none)
+- oprimizer: informations about oprimizer function
+    - cls: class name of the optimizer
+    - args: arguments passed to the optimizer (can be none)
+- scheduler: informations about scheduler function
+    - cls: class name of the lr scheduler
+    - args: arguments passed to the lr scheduler (can be none)
 
-- training: parameters related to the training
+- train: parameters related to the training
     - epochs: number of epochs used to train the model
     - batch_size: size of a batch of data that will be fed to the network
-    - shuffle_buffer: size of the buffer used for shuffling
-    - label_no_cyclone: label that indicates the TC absence within the patch
-    - only_tcs: whether to augment only TC-patches or all the patches.
-    - augmentation: augmentation functions are expressed as a key-value pair. key is the name associated to the augmentation and the value is a string that embeds Python code that load a Tensorflow (or custom) augmentation function.
-
+    - drop_remainder: whether or not to drop the last batch if the number of dataset elements is not divisible by the batch size
+    - accumulation_steps: number of gradient accumulation steps before calliing backward propagation
 
 ## Python3 Environment 
-The code has been tested on Python 3.8.16 with the following dependencies:
-- keras=2.12.0
-- numpy=1.23.5
-- pandas=1.5.3
-- psutil=5.9.5
-- scikit-learn=1.2.2
-- tensorflow-macos=2.12.0
+The code has been tested on Python 3.11.2 with the following dependencies:
+
+- dask == 2023.7.0
+- lightning == 2.0.9
+- mpi4py == 3.1.4
+- munch == 4.0.0
+- netcdf4 == 1.6.0
+- numpy == 1.24.1
+- pandas == 1.5.3
+- pytorch-lightning == 2.0.9
+- scikit-learn == 1.2.2
+- scipy == 1.10.1
+- timm == 0.9.7
+- toml == 0.10.2
+- torch == 2.0.1+cu118
+- torch-geometric == 2.5.0
+- torchaudio == 2.0.2+cu118
+- torchmetrics == 1.1.2
+- torchvision == 0.15.2+cu118
+- xarray == 2022.6.0

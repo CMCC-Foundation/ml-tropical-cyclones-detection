@@ -91,8 +91,8 @@ devices = args.devices
 seed = config.run.seed
 
 # directories
-run_dir = config.dir.run
 experiment_dir = config.dir.experiment
+run_dir = os.path.join(experiment_dir, config.dir.run)
 mean_src = config.dir.scaler.mean
 std_src = config.dir.scaler.std
 checkpoint = config.dir.checkpoint if hasattr(config.dir, 'checkpoint') else None

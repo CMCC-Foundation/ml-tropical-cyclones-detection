@@ -5,7 +5,7 @@ seed = 91723
 experiment = '../experiments'
 train = '../data/patches/train'
 valid = '../data/patches/valid'
-run = '../experiments/example_train'
+run = 'example_train'
 [dir.scaler]
     mean = '../data/patches/mean_1980_2004.nc'
     std = '../data/patches/std_1980_2004.nc'
