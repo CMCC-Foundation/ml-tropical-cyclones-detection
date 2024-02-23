@@ -1,47 +1,55 @@
-[dirs]
-main = '../'
-data = '../data/'
-model = '../backup/'
-experiments = '../experiments/'
-dataset = '../data/tfrecord/trainval/'
-scaler = '../data/scaler/'
-scaler_filename = 'x_scaler.dump'
-
 [run]
-name = 'vgg_test'
-seed = 42
+seed = 91723
+
+[dir]
+experiment = '../experiments'
+train = '../data/patches/train'
+valid = '../data/patches/valid'
+run = '../experiments/example_train'
+[dir.scaler]
+    mean = '../data/patches/mean_1980_2004.nc'
+    std = '../data/patches/std_1980_2004.nc'
+
+[torch]
+matmul_precision = "medium"
+dtype = 'torch.float32'
+
+[lightning]
+accelerator = "cpu" # "cuda"
+precision = "32-true"
 
 [data]
-patch_size = 40
-drivers = ['fg10', 'msl', 't_500', 't_300']
+drivers = ['fg10', 'i10fg', 'msl', 't_500', 't_300', 'vo_850']
 targets = ['patch_cyclone']
-drivers_shape = [40, 40]
-targets_shape = [2,]
-patch_type = 'nearest'
-force_scaler_compute = true
+label_no_cyclone = -1.0
 
 [model]
-network = "lb.models.VGG_V1(patch_size=40, channels=[6,2], initializer=tf.random_normal_initializer(0., 0.02), activation='relu', regularizer=None, kernel_size=3)"
-loss = "tf.keras.losses.MeanAbsoluteError(name='mae')"
-optimizer = "tf.keras.optimizers.Adam(learning_rate=0.0001)"
-metrics = [
-    "tf.keras.metrics.MeanSquaredError(name='mse')"
-]
-callbacks = [
-    "lb.callbacks.ProcessBenchmark(BENCHMARK_HISTORY_CSV)",
-    "tf.keras.callbacks.CSVLogger(LOSS_METRICS_HISTORY_CSV)",
-    "tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=100, min_delta=0.0001, restore_best_weights=True, verbose=1, mode='min')",
-    "tf.keras.callbacks.ModelCheckpoint(filepath=CHECKPOINT_FNAME, save_best_only=True, monitor='val_loss', mode='min', save_weights_only=False, verbose=1)",
-]
+monitor = 'val_loss'
+cls = 'tc.models.VGG_V3'
+metrics = []
+    [model.args]
+    in_channels = 6
+    out_channels = 2
+    activation = 'nn.ReLU'
+    kernel_size = 3
+    init_std = 0.05
 
-[training]
-epochs = 500
-batch_size = 8192
-shuffle_buffer = 32768
-label_no_cyclone = -1.0
-only_tcs = true
+[loss]
+cls = "nn.L1Loss"
+[loss.args]
 
-[training.augmentation]
-left_right = "lb.aug.coo_left_right"
-up_down = "lb.aug.coo_up_down"
-rot180 = "lb.aug.coo_rot180"
+[optimizer]
+cls = "torch.optim.Adam"
+    [optimizer.args]
+    lr = 0.0001
+    betas = [0.9, 0.999]
+    eps = 1e-7
+
+[scheduler]
+[scheduler.args]
+
+[train]
+epochs = 10
+batch_size = 32
+drop_remainder = true
+accumulation_steps = 1
