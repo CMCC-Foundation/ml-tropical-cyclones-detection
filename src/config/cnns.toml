@@ -1,11 +1,11 @@
 [run]
-seed = 91723
+seed = 78231
 
 [dir]
 experiment = '../experiments'
 train = '../data/patches/train'
 valid = '../data/patches/valid'
-run = 'example_train'
+run = '../experiments/01_vgg_v3_relu'
 [dir.scaler]
     mean = '../data/patches/mean_1980_2004.nc'
     std = '../data/patches/std_1980_2004.nc'
@@ -15,7 +15,7 @@ matmul_precision = "medium"
 dtype = 'torch.float32'
 
 [lightning]
-accelerator = "cpu" # "cuda"
+accelerator = "cpu"
 precision = "32-true"
 
 [data]
@@ -25,13 +25,12 @@ label_no_cyclone = -1.0
 
 [model]
 monitor = 'val_loss'
-cls = 'tc.models.VGG_V3'
+cls = 'VGG_V3'
 metrics = []
     [model.args]
     in_channels = 6
     out_channels = 2
     activation = 'nn.ReLU'
-    kernel_size = 3
     init_std = 0.05
 
 [loss]
@@ -41,15 +40,13 @@ cls = "nn.L1Loss"
 [optimizer]
 cls = "torch.optim.Adam"
     [optimizer.args]
-    lr = 0.0001
-    betas = [0.9, 0.999]
-    eps = 1e-7
+    lr = 1e-4
 
 [scheduler]
 [scheduler.args]
 
 [train]
-epochs = 10
-batch_size = 32
+epochs = 1
+batch_size = 128
 drop_remainder = true
 accumulation_steps = 1

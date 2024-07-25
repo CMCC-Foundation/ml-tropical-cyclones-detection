@@ -1,11 +1,20 @@
 import lightning.pytorch as pl
+import lightning as L
 from typing import Any
+import torch.nn.functional as F
 import torch.nn as nn
 import torch
+import torch_geometric
+from torch_geometric.utils import dropout_edge
+
+# Provenance logger
+import sys
+sys.path.append('../../ProvML')
+import prov4ml
 
 
 
-class BaseLightningModule(pl.LightningModule):
+class BaseLightningModule(L.LightningModule):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.callback_metrics = {}
@@ -21,9 +30,12 @@ class BaseLightningModule(pl.LightningModule):
         log_dict = {'train_loss': loss}
         # compute metrics
         for metric in self.metrics:
-            log_dict.update({f'train_{metric.name}' : metric(y_pred, y)})
+            metric_value = metric(y_pred, y)
+            log_dict.update({f'train_{metric.name}' : metric_value})
+            self.log(f'train_{metric.name}', metric_value, prog_bar=True)
         # log the outputs
         self.callback_metrics = {**self.callback_metrics, **log_dict}
+        self.log('train_loss', loss, prog_bar=True)
         # return the loss
         return {'loss':loss}
 
@@ -38,22 +50,17 @@ class BaseLightningModule(pl.LightningModule):
         log_dict = {'val_loss': loss}
         # compute metrics
         for metric in self.metrics:
-            log_dict.update({f'val_{metric.name}' : metric(y_pred, y)})
+            metric_value = metric(y_pred, y)
+            log_dict.update({f'val_{metric.name}' : metric_value})
+            self.log(f'val_{metric.name}', metric_value, prog_bar=True)
         # log the outputs
         self.callback_metrics = {**self.callback_metrics, **log_dict}
+        self.log('val_loss', loss, prog_bar=True)
         # return the loss
         return {'loss':loss}
 
-    def on_validation_model_eval(self) -> None:
-        self.eval()
-    def on_validation_model_train(self) -> None:
-        self.train()
-    def on_test_model_train(self) -> None:
-        self.train()
-    def on_test_model_eval(self) -> None:
-        self.eval()
-    def on_predict_model_eval(self) -> None:
-        self.eval()
+    def configure_optimizers(self):
+        return {'optimizer': self.optimizer, 'lr_scheduler': self.lr_scheduler}
 
 
 
@@ -235,3 +242,127 @@ class VGG_V3(BaseLightningModule):
                 if isinstance(module, nn.Conv2d) or isinstance(module, nn.Linear):
                     nn.init.normal_(module.weight, mean=0, std=std)
                     nn.init.normal_(module.bias, mean=0, std=std)
+
+        
+
+class BaseLightningModuleGNN(pl.LightningModule):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.callback_metrics = {}
+    
+    def training_step(self, batch, batch_idx):
+        # forward pass + loss computation
+        y_pred = self(batch)
+        loss = self.loss(y_pred, batch.y)
+        
+        # TODO can mix the loss with something else, like the recall and the distance from the cyclone, if there is one to calculate
+        
+        # log metric in provenance logger
+        prov4ml.log_metric("BCE_train", float(loss), prov4ml.Context.TRAINING, step=self.current_epoch)
+        
+        # define log dictionary
+        log_dict = {'train_loss': loss}
+        # compute metrics
+        for metric in self.metrics:
+            log_dict.update({f'train_{metric.name}' : metric(y_pred, batch.y)})
+        # log the outputs
+        self.callback_metrics = {**self.callback_metrics, **log_dict}
+        
+        return {'loss':loss}
+
+    def validation_step(self, batch, batch_idx):
+        # forward pass + loss computation
+        y_pred = self(batch)
+        loss = self.loss(y_pred, batch.y)
+        
+        # log metric in provenance logger
+        prov4ml.log_metric("BCE_eval", float(loss), prov4ml.Context.VALIDATION, step=self.current_epoch)
+        
+        # define log dictionary
+        log_dict = {'val_loss': loss}
+        # compute metrics
+        for metric in self.metrics:
+            log_dict.update({f'val_{metric.name}' : metric(y_pred, batch.y)})
+        # log the outputs
+        self.callback_metrics = {**self.callback_metrics, **log_dict}
+        
+        return {'loss':loss}
+
+    def on_validation_model_eval(self) -> None:
+        self.eval()
+    
+    def on_validation_model_train(self) -> None:
+        self.train()
+        prov4ml.log_system_metrics(prov4ml.Context.TRAINING, step=self.current_epoch)
+        prov4ml.log_carbon_metrics(prov4ml.Context.TRAINING, step=self.current_epoch)
+        prov4ml.log_current_execution_time("train_step", prov4ml.Context.TRAINING, self.current_epoch)
+        
+    def on_test_model_train(self) -> None:
+        self.train()
+    def on_test_model_eval(self) -> None:
+        self.eval()
+    def on_predict_model_eval(self) -> None:
+        self.eval()
+
+
+        
+class GraphUNet(BaseLightningModuleGNN):
+    def __init__(self,
+            in_channels: int,
+            hid_channels: int,
+            out_channels: int,
+            K_pool: int,
+            nodes_per_graph: int,
+            edge_dropout_rate: float,
+            node_dropout_rate: float,
+            activation: str,
+            *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        
+        self.edge_dropout_rate = edge_dropout_rate
+        self.node_dropout_rate = node_dropout_rate
+        self.activation = eval(activation)
+        
+        # Top-K pooling setup
+        if K_pool == -1:
+            K_pool = nodes_per_graph / 2
+        pool_ratios = [K_pool / nodes_per_graph, 0.5]
+        self.unet = torch_geometric.nn.GraphUNet(in_channels=in_channels,
+                                                 hidden_channels=hid_channels,
+                                                 out_channels=out_channels,
+                                                 depth=3,
+                                                 pool_ratios=pool_ratios)
+        
+    def forward(self, data):
+        edge_index, _ = dropout_edge(data.edge_index, p=self.edge_dropout_rate, force_undirected=True, training=self.training)
+        x = F.dropout(data.x, p=self.node_dropout_rate, training=self.training)
+        x = self.unet(x, edge_index)
+        return self.activation(x)
+
+
+
+class GAT(BaseLightningModuleGNN):
+    def __init__(self,
+            in_channels: int,
+            hid_channels: int,
+            num_layers: int,
+            out_channels: int,
+            dropout: float = 0.0,
+            act_first: bool = False,
+            final_act: str = 'nn.Sigmoid()',
+            *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        
+        self.final_act = eval(final_act)
+        self.model = torch_geometric.nn.GAT(in_channels=in_channels,
+                                            hidden_channels=hid_channels,
+                                            num_layers=num_layers,
+                                            out_channels=out_channels,
+                                            dropout=dropout,
+                                            act_first=act_first)
+            
+    def forward(self, data):
+        edge_index, _ = dropout_edge(data.edge_index, p=self.edge_dropout_rate, force_undirected=True, training=self.training)
+        x = F.dropout(data.x, p=self.node_dropout_rate, training=self.training)
+        x = self.model(x, edge_index)
+        return self.final_act(x)

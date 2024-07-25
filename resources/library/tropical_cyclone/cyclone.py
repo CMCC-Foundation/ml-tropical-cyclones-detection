@@ -2,6 +2,7 @@ from tropical_cyclone.macros import DENSITY_MAP_TC, SQUARE_MAP_TC, LABEL_MAP_TC
 from tropical_cyclone.georeferencing import from_local_to_global
 
 from scipy.ndimage import gaussian_filter
+from haversine import haversine_vector
 import pandas as pd
 import xarray as xr
 import numpy as np
@@ -122,3 +123,78 @@ def retrieve_predicted_tc(y_pred, ds, patch_ds, patch_size):
     patch_ds['patch_cyclone_pred'] = (('time','rows','cols','coordinate'), cyclone_latlon_coords)
     patch_ds['patch_rowcol_pred'] = (('time','rows','cols','rowcol'), cyclone_rowcol_coords)
     return patch_ds
+
+
+
+def init_track_dataframe(track_df):
+    # select only predicted cyclones
+    track_df = track_df[(~np.isnan(track_df['LAT'])) & (~np.isnan(track_df['LON']))][['ISO_TIME', 'LAT', 'LON', 'WS']].reset_index(drop=True)
+    # add empty track id data
+    track_df['TRACK_ID'] = ['' for _ in range(len(track_df))]
+    # add empty distance with previous TC
+    track_df['HAVERSINE'] = [np.inf for _ in range(len(track_df))]
+    return track_df
+
+
+def tracking_track_algorithm(track_df, max_distance=400.0, min_track_count=12, min_wind_speed=17.0):
+    # define columns and rename columns
+    columns = ['ISO_TIME_y', 'LAT_y', 'LON_y', 'TRACK_ID_x', 'HAVERSINE']
+    rename_cols = {'ISO_TIME_y':'ISO_TIME', 'LAT_y':'LAT', 'LON_y':'LON', 'TRACK_ID_x': 'TRACK_ID'}
+    # create an empty detected tracks `pd.DataFrame`
+    detected_tracks = pd.DataFrame(data={'ISO_TIME':[], 'LAT':[], 'LON':[], 'TRACK_ID':[], 'HAVERSINE':[]})
+    # get all iso times
+    iso_times = track_df['ISO_TIME'].unique()
+    # convert iso times to pandas datetime
+    iso_times = pd.to_datetime(iso_times)
+    # get first detections with first iso time
+    dets = track_df[track_df['ISO_TIME'] == iso_times[0]]
+    # add cosine as infinite
+    dets['HAVERSINE'] = np.inf
+    # assign track ids to the detections
+    dets['TRACK_ID'] = [i for i in range(len(dets))]
+    # add the detections to the tracks dataframe
+    detected_tracks = pd.concat([detected_tracks, dets])
+    # for each iso time (from the 2nd to the last)
+    for iso_time in iso_times[1:]:
+        # get last 6h detections from tracks
+        prev_dets = detected_tracks[detected_tracks['ISO_TIME'] == iso_time - pd.DateOffset(hours=6)]
+        # get current detections
+        cur_dets = track_df[track_df['ISO_TIME'] == iso_time]
+        # if no previous tracks are found
+        if len(prev_dets) == 0:
+            # add new track ids
+            cur_dets['TRACK_ID'] = [i+detected_tracks['TRACK_ID'].max()+1 for i in range(len(cur_dets))]
+            # add the detections to the detected_tracks
+            detected_tracks = pd.concat([detected_tracks, cur_dets])
+            continue
+        # set multiply between previous detections and current detections
+        merge_dets = pd.merge(left=prev_dets, right=cur_dets, how='cross')
+        # # compute haversine distance
+        merge_dets['HAVERSINE'] = haversine_vector(array1=merge_dets[['LAT_x','LON_x']].to_numpy(), array2=merge_dets[['LAT_y','LON_y']].to_numpy(), normalize=True)
+        # # remove high distance detections
+        merge_dets = merge_dets[merge_dets['HAVERSINE'] < max_distance]
+        # remove multiple correspondences on y (get min haversine)
+        merge_dets_tmp = merge_dets.copy()
+        for i,row in merge_dets[['LAT_y','LON_y']].drop_duplicates().iterrows():
+            md = merge_dets[(merge_dets['LAT_y']==row['LAT_y']) & (merge_dets['LON_y']==row['LON_y'])]
+            md_id = md[md['HAVERSINE'] != md.min()['HAVERSINE']].index
+            merge_dets_tmp = merge_dets_tmp.drop(index=md_id)
+        merge_dets = merge_dets_tmp
+        # remove multiple correspondences on x (get min haversine)
+        merge_dets_tmp = merge_dets.copy()
+        for i,row in merge_dets[['LAT_x','LON_x']].drop_duplicates().iterrows():
+            md = merge_dets[(merge_dets['LAT_x']==row['LAT_x']) & (merge_dets['LON_x']==row['LON_x'])]
+            md_id = md[md['HAVERSINE'] != md.min()['HAVERSINE']].index
+            merge_dets_tmp = merge_dets_tmp.drop(index=md_id)
+        merge_dets = merge_dets_tmp
+        # get only some columns
+        merge_dets = merge_dets[columns]
+        # rename columns
+        merge_dets = merge_dets.rename(columns=rename_cols)
+        # add merge detections to detected tracks
+        detected_tracks = pd.concat([detected_tracks, merge_dets])
+    # remove too short tracks
+    detected_tracks = detected_tracks.groupby('TRACK_ID').filter(lambda x: len(x) >= min_track_count).reset_index(drop=True)
+    # reset index
+    detected_tracks = detected_tracks.reset_index(drop=True)
+    return detected_tracks

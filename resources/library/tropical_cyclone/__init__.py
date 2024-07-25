@@ -19,12 +19,13 @@ from . import data_io as io
 from . import dataset
 from . import era5
 from . import georeferencing as georef
+from . import inference
 from . import macros
 from . import models
 from . import patch_proc as patchproc
+from . import sampler
 from . import scaling
+from . import tester
 from . import trainer
 from . import utils
-
-
-from .trainer import FabricTrainer
+from . import visualize

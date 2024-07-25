@@ -1,3 +1,4 @@
+from multiprocessing import Process, cpu_count
 from typing import List, Any
 from tqdm import tqdm
 import xarray as xr
@@ -121,7 +122,7 @@ class InterTwinDatasetWriter():
             x_data: np.array, 
             y_data: np.array, 
             ids: np.array
-        ):
+        ) -> [np.array, np.array]:
         # remove out of bound indices
         if ids.shape == (1, 0) or ids.shape == (0, 2) or len(ids.shape) == 1: return X, Y
         ids = ids[ids[:, 1] < x_data.shape[1]]
@@ -259,6 +260,69 @@ class InterTwinDatasetWriter():
         })
         return patch_ds
 
+    # def process_year(self,
+    #         dst_dir, 
+    #         year,
+    #         is_test: bool=False
+    #     ):
+    #     logging.info(f'Processing data of year {year}')
+    #     # define zarr files
+    #     tc_dst = os.path.join(dst_dir, f'{year}-cyclone.zarr')
+    #     no_tc_dst = os.path.join(dst_dir, f'{year}-no_cyclone.zarr')
+    #     aa_dst = os.path.join(dst_dir, f'{year}-all_adjacent.zarr')
+    #     nr_dst = os.path.join(dst_dir, f'{year}-nearest.zarr')
+    #     rn_dst = os.path.join(dst_dir, f'{year}-random.zarr')
+    #     # if zarr files already exist, then skip
+    #     if os.path.exists(tc_dst) or os.path.exists(no_tc_dst) or os.path.exists(aa_dst) or os.path.exists(nr_dst) or os.path.exists(rn_dst):
+    #         logging.info(f'   year already processed, skipping')
+    #         return
+    #     # for each filename in src
+    #     filepaths = sorted(glob.glob(os.path.join(self.src_dir, f'{year}*.nc')))
+    #     # for each file in the dataset
+    #     for _, filepath in zip(tqdm(filepaths), filepaths):
+    #         # open the dataset
+    #         ds = xr.load_dataset(filepath)
+    #         # add tropical cyclone mask
+    #         ds = self.__create_tc_maps(ds=ds)
+    #         # get dataset iso time
+    #         iso_time = self.__get_iso_time(ds)
+    #         # select iso time georef
+    #         georef = self.georef[self.georef['ISO_TIME'] == iso_time]
+    #         # get patched dataset
+    #         patch_ds = ds.coarsen({'lat':self.patch_size, 'lon':self.patch_size}, boundary="trim").construct({'lon':("cols", "lon_range"), 'lat':("rows", "lat_range")})
+    #         # get dataset patches ids
+    #         tc_ids, no_tc_ids, aa_ids, nr_ids, rn_ids = self.__get_patch_ids(ds, georef)
+    #         # fill patch dataset with tc info
+    #         patch_ds = self.__fill_patch_ds_with_tc_info(patch_ds, tc_ids, georef)
+    #         # store datasets to disk
+    #         self.__store_netcdf(dst_dir, patch_ds, tc_ids, 'cyclone')
+    #         self.__store_netcdf(dst_dir, patch_ds, no_tc_ids, 'no_cyclone') if is_test == True else None
+    #         self.__store_netcdf(dst_dir, patch_ds, aa_ids, 'alladjacent') if is_test == False else None
+    #         self.__store_netcdf(dst_dir, patch_ds, nr_ids, 'nearest') if is_test == False else None
+    #         self.__store_netcdf(dst_dir, patch_ds, rn_ids, 'random') if is_test == False else None
+
+    # def __store_netcdf(self, 
+    #         dst: str, 
+    #         patch_ds: xr.Dataset, 
+    #         ids: List, 
+    #         patch_type: str, 
+    #     ) -> int:
+    #     # for each id
+    #     for i,id in enumerate(ids):
+    #         # check if the id is out of bound
+    #         if id[0] == patch_ds.rows.data.shape[0] or id[1] == patch_ds.cols.data.shape[0]:
+    #             continue
+    #         t = pd.to_datetime(patch_ds.time.data[0])
+    #         # define destination file
+    #         dst_file = os.path.join(dst, f'{patch_type}_{t.year}{t.month:02d}{t.day:02d}{t.hour:02d}_{i:02d}.nc')
+    #         # select the TC from the patch ds
+    #         patch = patch_ds.isel(time=0, rows=id[0], cols=id[1])
+    #         # drop the coordinates
+    #         patch = patch.drop(('time', 'lat', 'lon'))
+    #         # store patch netcdf to disk
+    #         patch.to_netcdf(dst_file)
+    #         # increase the counter
+
 
 
 class InterTwinMPIDatasetWriter(InterTwinDatasetWriter):
@@ -289,3 +353,44 @@ class InterTwinMPIDatasetWriter(InterTwinDatasetWriter):
             years, 
             is_test: bool = False):
         self.process_years_MPI(dst_dir=dst_dir, years=years, is_test=is_test)
+
+
+
+class InterTwinMultiprocDatasetWriter(InterTwinDatasetWriter):
+    def __init__(self, 
+        src_dir: str, 
+        georef: pd.DataFrame, 
+        patch_vars: List[str], 
+        coo_vars: List[str], 
+        patch_size: int = 40, 
+        label_no_cyclone: float = -1, 
+        sigma: int = 10, 
+        grid_res: float = 0.25, 
+        dtype: Any = np.float32
+    ) -> None:
+        super().__init__(src_dir, georef, patch_vars, coo_vars, patch_size, label_no_cyclone, sigma, grid_res, dtype)
+
+    def process(self, 
+            dst_dir, 
+            years,
+            is_test: bool=False
+        ):
+
+        # Get as many processes as possible
+        num_processes = cpu_count()
+        processes = []
+
+        # Allocate processes
+        for rank in range(num_processes):
+            process = Process(target=self.process_years_multiproc, args=(dst_dir, years, rank, num_processes, is_test))
+            processes.append(process)
+
+        # Start all processes
+        for process in processes:
+            process.start()
+
+        # Wait for all processes to finish
+        for process in processes:
+            process.join()
+
+        return self

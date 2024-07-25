@@ -2,17 +2,17 @@
 #  Program imports
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
-from lightning.fabric.plugins.environments import MPIEnvironment
-from torch.utils.data.distributed import DistributedSampler
-from lightning.fabric.strategies.fsdp import FSDPStrategy
-from torch.distributed.fsdp import ShardingStrategy
 from lightning.fabric.loggers import CSVLogger
-from torch.utils.data import DataLoader
-import torch.nn as nn
+from lightning.fabric.strategies.fsdp import FSDPStrategy
 import torch
+from torch.distributed.fsdp import ShardingStrategy
+import torch.nn as nn
+from torch.utils.data.distributed import DistributedSampler
+from torch_geometric.loader import DataLoader
 
 import argparse
 import logging
+import joblib
 import shutil
 import munch
 import toml
@@ -29,12 +29,15 @@ warnings.simplefilter("ignore")
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
 import sys
-sys.path.append('../resources/library/')
+sys.path.append('../resources/library')
 import tropical_cyclone as tc
-from tropical_cyclone.callbacks import FabricBenchmark, FabricCheckpoint
-from tropical_cyclone.dataset import InterTwinTrainvalCycloneDataset
-from tropical_cyclone.scaling import StandardScaler
-from tropical_cyclone import FabricTrainer
+from tropical_cyclone.trainer import FabricTrainer
+from tropical_cyclone.callbacks import DiscordLog, FabricBenchmark, FabricCheckpoint
+from tropical_cyclone.dataset import TCGraphDataset
+
+# Provenance logger
+sys.path.append('../../ProvML')
+import prov4ml
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
@@ -91,12 +94,12 @@ devices = args.devices
 seed = config.run.seed
 
 # directories
+run_dir = config.dir.run
 experiment_dir = config.dir.experiment
-run_dir = os.path.join(experiment_dir, config.dir.run)
-mean_src = config.dir.scaler.mean
-std_src = config.dir.scaler.std
+scaler_fpath = config.dir.scaler
+webhook_url = config.dir.webhook if hasattr(config.dir, 'webhook') else None
 checkpoint = config.dir.checkpoint if hasattr(config.dir, 'checkpoint') else None
-train_src = config.dir.train
+train_src = config.dir.valid
 valid_src = config.dir.valid
 
 # pytorch
@@ -133,6 +136,7 @@ targets = config.data.targets
 # train
 epochs = config.train.epochs
 batch_size = config.train.batch_size
+augmentation = config.train.augmentation
 drop_remainder = config.train.drop_remainder
 accumulation_steps = config.train.accumulation_steps
 n_samples = config.train.n_samples if hasattr(config.train,'n_samples') else None
@@ -144,14 +148,12 @@ n_samples = config.train.n_samples if hasattr(config.train,'n_samples') else Non
 #  Environment setup
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
-device = 'cpu'
 # set the device
-if torch.cuda.is_available():
-    device = 'cuda'
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 torch.set_float32_matmul_precision(matmul_precision)
 
 # define important directories
-log_dir = os.path.join(run_dir, 'logs')
+log_dir = os.path.join(run_dir, 'logs_training')
 logging_dir = os.path.join(log_dir, 'logging')
 checkpoint_dir = os.path.join(run_dir, 'checkpoints')
 
@@ -180,12 +182,13 @@ shutil.copy(src=args.config, dst=os.path.join(run_dir, 'configuration.toml'))
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
 # load scaler
-scaler = StandardScaler(mean_src=mean_src, std_src=std_src, drivers=drivers)
+scaler = joblib.load(scaler_fpath)
 
 # define user callbacks
 callbacks = [
     FabricCheckpoint(dst=checkpoint_dir, monitor='val_loss', verbose=False), 
     FabricBenchmark(filename=benchmark_csv), 
+    DiscordLog(webhook_url=webhook_url, benchmark_csv=benchmark_csv, msg_every_n_epochs=10, plot_every_n_epochs=10), 
 ]
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
@@ -208,12 +211,12 @@ trainer = FabricTrainer(
     devices=devices, 
     num_nodes=num_nodes, 
     precision=precision, 
-    loggers=logger, 
-    plugins=[MPIEnvironment()], 
+    loggers=logger,
+    plugins=[], 
     callbacks=callbacks, 
     max_epochs=epochs, 
     grad_accum_steps=accumulation_steps, 
-    use_distributed_sampler=False, 
+    use_distributed_sampler=False,
     seed=seed, 
 )
 
@@ -230,7 +233,7 @@ local_rank = trainer.local_rank
 #  Init Logger
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
-# initialize logger
+# Initialize general logger
 logging_level = logging.INFO
 logging.basicConfig(format="[%(asctime)s] %(levelname)s : %(message)s", filename=f'{logging_dir}/dev-{global_rank}.log', filemode='w', level=logging_level, datefmt='%Y-%m-%d %H:%M:%S')
 
@@ -245,19 +248,21 @@ logging.info(f"   Local rank  : {local_rank}")
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-#  Initialize ML Model
+#  Initialize provenance logger
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
-# init model
-model:nn.Module = model_cls(**model_args)
-model.loss = loss_cls(**loss_args)
-model.metrics = [mts() for mts in metrics_list]
+prov_path = os.path.join(run_dir, "prov_path")
+os.makedirs(prov_path, exist_ok=True)
 
-# setup the model and the optimizer
-trainer.setup(model=model, optimizer_cls=optimizer_cls, optimizer_args=optimizer_args, scheduler_cls=scheduler_cls, scheduler_args=scheduler_args, checkpoint=checkpoint)
+prov4ml.start_run(
+    prov_user_namespace="www.example.org",
+    experiment_name="default", 
+    provenance_save_dir=prov_path, 
+    collect_all_processes=False,
+    save_after_n_logs=100,
+)
 
-# log
-logging.info(f'Model and Fabric Trainer inizialized')
+logging.info(f"Prov4ML logger started running")
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
@@ -267,8 +272,8 @@ logging.info(f'Model and Fabric Trainer inizialized')
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
 # init train and validation datasets
-train_dataset = InterTwinTrainvalCycloneDataset(src=train_src, drivers=drivers, targets=targets, scaler=scaler, augmentation=True, dtype=dtype)
-valid_dataset = InterTwinTrainvalCycloneDataset(src=valid_src, drivers=drivers, targets=targets, scaler=scaler, augmentation=True, dtype=dtype)
+train_dataset = TCGraphDataset(src=train_src, drivers=drivers, targets=targets, scaler=scaler, augmentation=augmentation, dtype=dtype)
+valid_dataset = TCGraphDataset(src=valid_src, drivers=drivers, targets=targets, scaler=scaler, augmentation=augmentation, dtype=dtype)
 
 # log
 logging.info(f'Train and valid datasets inizialized')
@@ -291,6 +296,28 @@ logging.info(f'Dataloaders created')
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+#  Initialize ML Model
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+
+# init model
+prov4ml.log_param("model arguments", model_args)
+model:nn.Module = model_cls(**model_args)
+model.loss = loss_cls(**loss_args)
+model.metrics = [mts() for mts in metrics_list]
+model = model.to(device)
+
+print(model)
+
+# setup the model and the optimizer
+trainer.setup(model=model, optimizer_cls=optimizer_cls, optimizer_args=optimizer_args, scheduler_cls=scheduler_cls, scheduler_args=scheduler_args, checkpoint=checkpoint)
+
+# log
+logging.info(f'Model and Fabric Trainer inizialized')
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 #  Train and Validate the model
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
@@ -304,7 +331,9 @@ trainer.fit(train_loader=train_loader, val_loader=valid_loader)
 logging.info(f'Model trained')
 
 # save the model to disk
-trainer.fabric.save(path=last_model, state={'model':trainer.model, 'optimizer':trainer.optimizer, 'scheduler': trainer.scheduler_cfg})
+torch.save(model.state_dict(), f=last_model)
+#trainer.fabric.save(path=last_model, state={'model':trainer.model, - TODO the torch.load during inference doesn't work with this method
+    #'optimizer':trainer.optimizer, 'scheduler': trainer.scheduler_cfg})
 
 # log
 logging.info(f'Last model saved to {last_model}')
@@ -318,6 +347,13 @@ logging.info(f'Last model saved to {last_model}')
 
 # log
 logging.info(f'Program completed')
+
+# log model in provenance graph
+model_name = str(config.model.cls.split('.')[-1])
+prov4ml.log_model(model, model_name)
+
+# terminate prov4ml
+prov4ml.end_run(create_graph=True, create_svg=False)
 
 # close program
 exit(1)

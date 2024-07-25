@@ -1,7 +1,14 @@
 import numpy as np
 import torch
+import enum
 import os
 
+
+
+class FileExtension(enum.Enum):
+    PYTORCH = 0
+    NETCDF = 1
+    NUMPY = 2
 
 
 def seed_everything(seed: int):
