@@ -88,6 +88,17 @@ With regards to the configuration file, it must be prepared in toml format. The 
     - drop_remainder: whether or not to drop the last batch if the number of dataset elements is not divisible by the batch size
     - accumulation_steps: number of gradient accumulation steps before calliing backward propagation
 
+## How to
+
+### Download IBTrACS
+
+Since the TC Detection case study relies on IBTrACS dataset, it must be downloaded from the official repository. 
+
+- Go to the IBTrACS page on the NOAA site at this link: https://www.ncei.noaa.gov/products/international-best-track-archive
+- Go to the "_Access Methods_" paragraph
+- On the central panel (named "_Comma Separated Values (CSV)_"), click on **CSV Data**
+- From the page that opens (at https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv/), any IBTrACS dataset can be downloaded (e.g., filtered by basin, global, ecc)
+
 ## Python3 Environment 
 The code has been tested on Python 3.11.2 with the following dependencies:
 
