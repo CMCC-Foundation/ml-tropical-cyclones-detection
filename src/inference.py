@@ -8,7 +8,7 @@ warnings.filterwarnings('ignore')
 
 sys.path.append('../resources/library')
 from tropical_cyclone.macros import TEST_YEARS as test_years
-from tropical_cyclone.inference import Inference
+from tropical_cyclone.inference import SingleModelInference
 
 
 # initialize MPI
@@ -55,11 +55,8 @@ logging.basicConfig(format="[%(asctime)s] %(levelname)s : %(message)s", filename
 
 logging.info(f'Starting inference')
 
-inference = Inference(
-    model_dir=run_dir, dataset_dir=dataset_dir, ibtracs_src=None, 
-    lat_range=[0,70], lon_range=[100,320], is_cmip6=False,
-    device='mps'
-)
+inference = SingleModelInference(model_dir=run_dir, device='mps')
+drivers = inference.drivers
 
 logging.info(f'Evaluating test set years')
 
@@ -70,10 +67,9 @@ for i in range(rank, len(test_years), size):
     detection_dst = os.path.join(inference_model_dir, f'{year}.csv')
     logging.info(f'  Predicting...')
     # predict with the model
-    inference.predict(year)
+    ds, dates = inference.load_dataset(dataset_dir=dataset_dir, drivers=drivers, year=year, is_cmip6=False)
+    detections = inference.predict(ds, patch_size=40)
     logging.info(f'   ...done')
-    # get the detections
-    detections = inference.detections
     # store detections on disk
     inference.store_detections(detections, detection_dst)
     logging.info(f'   predictions stored')
