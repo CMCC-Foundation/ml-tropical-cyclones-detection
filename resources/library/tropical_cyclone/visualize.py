@@ -1,4 +1,4 @@
-import warnings
+# import warnings
 import numpy as np
 import cartopy.crs as ccrs
 import cartopy.feature as cf
@@ -8,11 +8,11 @@ from cartopy.mpl.ticker import (LongitudeFormatter, LatitudeFormatter)
 
 
 
-def plot_detections(detections, observations, lat_range, lon_range, outfile=None):
+def plot_detections(detections, observations, lat_range=(0,70), lon_range=(100,320), outfile=None):
 	# set map extent
 	central_longitude = (lon_range[1] - lon_range[0])
 
-	fig = plt.figure(figsize=(25,10))
+	_ = plt.figure(figsize=(25,10))
 	proj = ccrs.PlateCarree(central_longitude=central_longitude)
 	ax = plt.axes(projection=proj)
 
@@ -32,7 +32,7 @@ def plot_detections(detections, observations, lat_range, lon_range, outfile=None
 	ax.scatter(observations['LON'], observations['LAT'], s=marker_size, marker='o', alpha=1.0, transform=ccrs.Geodetic(), label=f'TC Observations (#{len(observations)})')
 
 	# x-axis
-	longitudes = np.arange(lon_range[0], lon_range[1]+1, 40)
+	longitudes = np.arange(lon_range[0], lon_range[1]+1, 10)
 	lon_formatter = LongitudeFormatter(zero_direction_label=False)
 	ax.xaxis.set_major_formatter(lon_formatter)
 	ax.xaxis.set_major_locator(mticker.FixedLocator(longitudes-central_longitude))
@@ -41,7 +41,7 @@ def plot_detections(detections, observations, lat_range, lon_range, outfile=None
 	ax.set_xlabel('Longitude [deg]', fontdict=fontdict)
 
 	# y-axis
-	latitudes = np.arange(lat_range[0], lat_range[1]+1, 20)
+	latitudes = np.arange(lat_range[0], lat_range[1]+1, 10)
 	lat_formatter = LatitudeFormatter()
 	ax.yaxis.set_major_formatter(lat_formatter)
 	ax.yaxis.set_major_locator(mticker.FixedLocator(latitudes))
@@ -67,7 +67,7 @@ def plot_detections(detections, observations, lat_range, lon_range, outfile=None
 	plt.show()
 
 
-def plot_tracks(det_tracks, obs_tracks, lat_range, lon_range, outfile=None):
+def plot_tracks(det_tracks, obs_tracks, lat_range=(0,70), lon_range=(100,320), outfile=None):
 	# set map extent
 	central_longitude = (lon_range[1] - lon_range[0])
 
@@ -97,7 +97,7 @@ def plot_tracks(det_tracks, obs_tracks, lat_range, lon_range, outfile=None):
 		ax.scatter(det_tracks[det_tracks['TRACK_ID']==id]['LON'], det_tracks[det_tracks['TRACK_ID']==id]['LAT'], s=marker_size, marker='o', alpha=0.9, transform=transform, color='red', label=f'Detected Tracks (#{len(det_tracks["TRACK_ID"].unique())})' if i==0 else None)
 
 	# x-axis
-	longitudes = np.arange(lon_range[0], lon_range[1]+1, 40)
+	longitudes = np.arange(lon_range[0], lon_range[1]+1, 10)
 	lon_formatter = LongitudeFormatter(zero_direction_label=False)
 	ax.xaxis.set_major_formatter(lon_formatter)
 	ax.xaxis.set_major_locator(mticker.FixedLocator(longitudes-central_longitude))
@@ -106,7 +106,7 @@ def plot_tracks(det_tracks, obs_tracks, lat_range, lon_range, outfile=None):
 	ax.set_xlabel('Longitude [deg]', fontdict=fontdict)
 
 	# y-axis
-	latitudes = np.arange(lat_range[0], lat_range[1]+1, 20)
+	latitudes = np.arange(lat_range[0], lat_range[1]+1, 10)
 	lat_formatter = LatitudeFormatter()
 	ax.yaxis.set_major_formatter(lat_formatter)
 	ax.yaxis.set_major_locator(mticker.FixedLocator(latitudes))

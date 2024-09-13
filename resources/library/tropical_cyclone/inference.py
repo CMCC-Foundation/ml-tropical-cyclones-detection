@@ -1,4 +1,4 @@
-from tropical_cyclone.cyclone import retrieve_predicted_tc, init_track_dataframe, tracking_track_algorithm
+from tropical_cyclone.cyclone import retrieve_predicted_tc, init_track_dataframe, tracking_algorithm
 from tropical_cyclone.macros import ERA5_CMIP6_DRIVERS_MAPPING
 from tropical_cyclone.georeferencing import round_to_grid
 from tropical_cyclone.scaling import StandardScaler
@@ -155,7 +155,7 @@ def get_detected_tracks(detections, max_distance=400.0, min_track_count=12, min_
     # initialize tracking dataframe
     detected_tracks = init_track_dataframe(detections)
     # apply tracking scheme to detections
-    detected_tracks = tracking_track_algorithm(track_df=detected_tracks, max_distance=max_distance, min_track_count=min_track_count, min_wind_speed=min_wind_speed)
+    detected_tracks = tracking_algorithm(tracks=detected_tracks, max_distance=max_distance, min_track_count=min_track_count, min_wind_speed=min_wind_speed)
     return detected_tracks
 
 
@@ -306,5 +306,5 @@ class EnsembleModelInference(Inference):
         # initialize tracking dataframe
         detected_tracks = init_track_dataframe(detections)
         # apply tracking scheme to detections
-        detected_tracks = tracking_track_algorithm(track_df=detected_tracks, max_distance=max_distance, min_track_count=min_track_count, min_wind_speed=min_wind_speed)
+        detected_tracks = tracking_algorithm(tracks=detected_tracks, max_distance=max_distance, min_track_count=min_track_count, min_wind_speed=min_wind_speed)
         return detected_tracks
