@@ -31,6 +31,7 @@ metrics = []
     in_channels = 6
     out_channels = 2
     activation = 'nn.ReLU'
+    kernel_size = 3
     init_std = 0.05
 
 [loss]
