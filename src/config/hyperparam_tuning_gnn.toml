@@ -3,15 +3,12 @@ seed = 12368
 
 [dir]
 experiment = '../experiments'
-run = '../experiments/graphunet_hyperparam_tuning_h3'
+run = '../experiments/graphunet_hyperparam_tuning_h2'
 scaler = '../data/scalers/standard.dump'
 train = '../data/patches/train'
 valid = '../data/patches/valid'
 test = '../data/patches/test'
 result = 'result.pkl'
-
-# add the result file name here
-
 
 [torch]
 matmul_precision = "medium"
@@ -32,7 +29,7 @@ metrics = []
     in_channels = 6
     hid_channels = 64
     out_channels = 1
-    K_pool = [800, 1600]
+    K_pool = 800
     nodes_per_graph = 1600 # 40x40 grids translate to 1600 nodes per graph
     edge_dropout_rate = 0.2
     node_dropout_rate = 0.6
@@ -43,19 +40,73 @@ cls = 'nn.BCELoss'
     [loss.args]
 
 [optimizer]
+# To use the same optimizer with different configurations for the hyperparameters, use the following format:
+# Add the name of the version that you want after an underscore ('_') at the end of the optimizer name.
+# Format: 'torch.optim.Adam[_optional name]'
+# Example: 'torch.optim.Adam_Version1', 'torch.optim.Adagrad_test_number_2'.
 
-cls = ['torch.optim.Adam', 'torch.optim.Adagrad']#, 'torch.optim.SGD', 'torch.optim.RMSprop', 'torch.optim.Adagrad', 'torch.optim.Adadelta', 'torch.optim.Nadam', 'torch.optim.Adamax']
+#cls = ['torch.optim.Adam', 'torch.optim.Adam_v1', 'torch.optim.Adagrad', 'torch.optim.SGD', 'torch.optim.RMSprop', 'torch.optim.Adadelta', 'torch.optim.NAdam', 'torch.optim.Adamax']
+#
 
-#cls = 'torch.optim.Adam'#, 'torch.optim.SGD', 'torch.optim.RMSprop', 'torch.optim.Adagrad', 'torch.optim.Adadelta', 'torch.optim.Nadam', 'torch.optim.Adamax']
+  [optimizer.Adam]
+  lr = 0.001
+  betas = [0.9, 0.999]
+  eps = 1e-08
+  weight_decay = 0
+  amsgrad = false
+  
+  [optimizer.Adam_v1]
+  lr = 0.001
+  betas = [0.9, 0.999]
+  eps = 1e-08
+  weight_decay = 0
+  amsgrad = true
 
- #   [optimizer.args]
-  #  lr = 0.01
+  [optimizer.Adagrad]
+  lr = 0.01
+  lr_decay = 0
+  weight_decay = 0
+  initial_accumulator_value = 0
+  eps = 1e-10
+
+  [optimizer.SGD]
+  lr = 0.001
+  momentum = 0
+  dampening = 0
+  weight_decay = 0
+  nesterov = false
+
+  [optimizer.RMSprop]
+  lr = 0.01
+  alpha = 0.99
+  eps = 1e-08
+  weight_decay = 0
+  momentum = 0
+  centered = false
+
+  [optimizer.Adadelta]
+  lr = 1.0
+  rho = 0.9
+  eps = 1e-06
+  weight_decay = 0
+
+  [optimizer.NAdam]
+  lr = 0.002
+  betas = [0.9, 0.999]
+  eps = 1e-08
+  weight_decay = 0
+
+  [optimizer.Adamax]
+  lr = 0.002
+  betas = [0.9, 0.999]
+  eps = 1e-08
+  weight_decay = 0
 
 [scheduler]
     [scheduler.args]
 
 [train]
-epochs = 1
+epochs = [5,10]
 batch_size = 512
 augmentation = true
 drop_remainder = true

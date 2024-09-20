@@ -3,7 +3,7 @@ seed = 12368
 
 [dir]
 experiment = '../experiments'
-run = '../experiments/graphunet_15'
+run = '../experiments/graphunet'
 scaler = '../data/scalers/standard.dump'
 train = '../data/patches/train'
 valid = '../data/patches/valid'
@@ -32,7 +32,7 @@ metrics = []
     nodes_per_graph = 1600 # 40x40 grids translate to 1600 nodes per graph
     edge_dropout_rate = 0.2
     node_dropout_rate = 0.6
-    activation = 'nn.Sigmoid()' # Linear(1, 1)'
+    activation = 'nn.Sigmoid()'
 
 [loss]
 cls = 'nn.BCELoss'
@@ -41,13 +41,19 @@ cls = 'nn.BCELoss'
 [optimizer]
 cls = 'torch.optim.Adam'
     [optimizer.args]
-    lr = 0.01
+    lr = 0.001
+    betas = [0.9, 0.999]
+    eps = 1e-07
+    weight_decay = 0
+    amsgrad = false
 
 [scheduler]
-    [scheduler.args]
+    [scheduler.annealing]
+    [scheduler.warmup]
+    total_iters = 5 # warmup epochs
 
 [train]
-epochs = 5
+epochs = 10
 batch_size = 512
 augmentation = true
 drop_remainder = true

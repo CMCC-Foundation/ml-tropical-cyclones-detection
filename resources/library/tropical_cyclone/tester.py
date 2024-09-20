@@ -77,26 +77,61 @@ class GraphTester:
                 start = end
                 end += self.nodes_per_graph
         
-        # printing these before the metrics calculation, so in case of divisions by zero it would still be possible to have a look at them
         print(f'Threshold: {threshold}')
-        print(f'\ttrue_pos, true_neg, false_pos, false_neg: {true_pos, true_neg, false_pos, false_neg}')
+        print(f'\tTrue  positives: {true_pos}')
+        print(f'\tFalse positives: {false_pos}')
+        print(f'\tTrue  negatives: {true_neg}')
+        print(f'\tFalse negatives: {false_neg}')
         
-        dist_sum = dist_sum / (true_pos+false_pos)
-        accuracy = (true_pos+true_neg) / (true_pos+false_pos+true_neg+false_neg)
-        precision = true_pos/(true_pos+false_pos)
-        recall = true_pos/(true_pos+false_neg)
-        F1_score = 2*(precision*recall)/(precision+recall)
+        # in case of division by zero I'm returning an error string with all the metrics that were involved
+        zero_division = ''
+        
+        try:
+            dist_sum = dist_sum / (true_pos+false_pos)
+        except ZeroDivisionError:
+            print("Error: Division by zero in average distance calculation, leaving distance untouched")
+            zero_division += 'distance, '
+        
+        try:
+            accuracy = (true_pos+true_neg) / (true_pos+false_pos+true_neg+false_neg)
+        except ZeroDivisionError:
+            print("Error: Division by zero in accuracy calculation, keeping just the numerator")
+            accuracy = (true_pos+true_neg)
+            zero_division += 'accuracy, '
+        
+        try:
+            precision = true_pos/(true_pos+false_pos)
+        except ZeroDivisionError:
+            print("Error: Division by zero in precision calculation, keeping just the numerator")
+            precision = true_pos
+            zero_division += 'precision, '
+        
+        try:
+            recall = true_pos/(true_pos+false_neg)
+        except ZeroDivisionError:
+            print("Error: Division by zero in recall calculation, keeping just the numerator")
+            recall = true_pos
+            zero_division += 'recall, '
+        
+        try:
+            F1_score = 2*(precision*recall)/(precision+recall)
+        except ZeroDivisionError:
+            print("Error: Division by zero in F1_score calculation, keeping just the numerator")
+            F1_score = 2*(precision*recall)
+            zero_division += 'F1_score, '
         
         print(f'\tAverage distance between preds and targets: {dist_sum:.3f}')
-        print(f'\tAccuracy:\t{accuracy:.6f}')
-        print(f'\tPrecision:\t{precision:.6f}')
-        print(f'\tRecall:\t\t{recall:.6f}')
-        print(f'\tF1 score:\t{F1_score:.6f}')
+        print(f'\tAccuracy:  {accuracy:.6f}')
+        print(f'\tPrecision: {precision:.6f}')
+        print(f'\tRecall:    {recall:.6f}')
+        print(f'\tF1 score:  {F1_score:.6f}')
     
         metrics = {
+            'avg_dist': dist_sum,
             'accuracy': accuracy,
             'precision': precision,
             'recall': recall,
-            'F1 score': F1_score
+            'F1 score': F1_score,
+            'zero_division': zero_division
         }
         return metrics

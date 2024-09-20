@@ -2,11 +2,14 @@
 #  Program imports
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
-from lightning.fabric.loggers import CSVLogger
+from lightning import Trainer
+from lightning.pytorch.strategies.ddp import DDPStrategy
 from lightning.fabric.strategies.fsdp import FSDPStrategy
+from lightning.pytorch.callbacks import ModelCheckpoint
 import torch
-from torch.distributed.fsdp import ShardingStrategy
 import torch.nn as nn
+from torch.distributed.fsdp import ShardingStrategy
+from torch.optim import lr_scheduler
 from torch.utils.data.distributed import DistributedSampler
 from torch_geometric.loader import DataLoader
 
@@ -31,8 +34,7 @@ warnings.simplefilter("ignore")
 import sys
 sys.path.append('../resources/library')
 import tropical_cyclone as tc
-from tropical_cyclone.trainer import FabricTrainer
-from tropical_cyclone.callbacks import DiscordLog, FabricBenchmark, FabricCheckpoint
+from tropical_cyclone.callbacks import DiscordLog
 from tropical_cyclone.dataset import TCGraphDataset
 
 # Provenance logger
@@ -90,7 +92,7 @@ devices = args.devices
 #  Parse Configuration file
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
-# run
+# run - TODO not in use anymore
 seed = config.run.seed
 
 # directories
@@ -99,7 +101,7 @@ experiment_dir = config.dir.experiment
 scaler_fpath = config.dir.scaler
 webhook_url = config.dir.webhook if hasattr(config.dir, 'webhook') else None
 checkpoint = config.dir.checkpoint if hasattr(config.dir, 'checkpoint') else None
-train_src = config.dir.valid
+train_src = config.dir.train
 valid_src = config.dir.valid
 
 # pytorch
@@ -126,8 +128,8 @@ optimizer_cls = eval(config.optimizer.cls)
 optimizer_args = dict(config.optimizer.args)
 
 # scheduler
-scheduler_cls = eval(config.scheduler.cls) if hasattr(config.scheduler, 'cls') else None
-scheduler_args = dict(config.scheduler.args) if hasattr(config.scheduler, 'cls') else None
+scheduler_warmup_args = config.scheduler.warmup
+scheduler_annealing_args = config.scheduler.annealing
 
 # data
 drivers = config.data.drivers
@@ -149,7 +151,7 @@ n_samples = config.train.n_samples if hasattr(config.train,'n_samples') else Non
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
 # set the device
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cuda')
 torch.set_float32_matmul_precision(matmul_precision)
 
 # define important directories
@@ -168,9 +170,6 @@ os.makedirs(log_dir, exist_ok=True)
 os.makedirs(logging_dir, exist_ok=True)
 os.makedirs(checkpoint_dir, exist_ok=True)
 
-# logger and profiler
-logger = CSVLogger(root_dir=log_dir, name='csv-logs')
-
 # save training hyperparameters
 shutil.copy(src=args.config, dst=os.path.join(run_dir, 'configuration.toml'))
 
@@ -186,8 +185,7 @@ scaler = joblib.load(scaler_fpath)
 
 # define user callbacks
 callbacks = [
-    FabricCheckpoint(dst=checkpoint_dir, monitor='val_loss', verbose=False), 
-    FabricBenchmark(filename=benchmark_csv), 
+    ModelCheckpoint(checkpoint_dir, "epoch-{epoch:04d}-val_loss-{val_loss:.2f}", monitor='val_loss', save_last=True, save_top_k=5, auto_insert_metric_name=False),
     DiscordLog(webhook_url=webhook_url, benchmark_csv=benchmark_csv, msg_every_n_epochs=10, plot_every_n_epochs=10), 
 ]
 
@@ -200,24 +198,27 @@ callbacks = [
 
 # init distribution strategy
 if accelerator == 'cuda':
-    strategy = FSDPStrategy(sharding_strategy=ShardingStrategy.NO_SHARD)
+    strategy = DDPStrategy()    #FSDPStrategy(sharding_strategy=ShardingStrategy.NO_SHARD)
 else:
     strategy = 'auto'
 
 # initialize trainer
-trainer = FabricTrainer(
+trainer = Trainer(
     accelerator=accelerator, 
     strategy=strategy, 
     devices=devices, 
     num_nodes=num_nodes, 
     precision=precision, 
-    loggers=logger,
-    plugins=[], 
+    logger=None,
     callbacks=callbacks, 
     max_epochs=epochs, 
-    grad_accum_steps=accumulation_steps, 
-    use_distributed_sampler=False,
-    seed=seed, 
+    enable_checkpointing=True, 
+    enable_progress_bar=True, 
+    accumulate_grad_batches=accumulation_steps, 
+    use_distributed_sampler=False, 
+    default_root_dir=run_dir, 
+    num_sanity_val_steps=0, 
+    enable_model_summary=False,
 )
 
 # store parallel execution variables
@@ -302,14 +303,23 @@ logging.info(f'Dataloaders created')
 # init model
 prov4ml.log_param("model arguments", model_args)
 model:nn.Module = model_cls(**model_args)
+
+# init scheduler
+optimizer = optimizer_cls(model.parameters(), **optimizer_args)
+warmup = lr_scheduler.LinearLR(optimizer=optimizer, **scheduler_warmup_args, verbose=True)
+annealing = lr_scheduler.CosineAnnealingWarmRestarts(optimizer=optimizer, T_0=epochs+1, **scheduler_annealing_args, verbose=True)
+lr_scheduler = lr_scheduler.SequentialLR(optimizer=optimizer, schedulers=[warmup, annealing], milestones=[scheduler_warmup_args['total_iters']], verbose=True)
+
+# init model attributes
 model.loss = loss_cls(**loss_args)
+model.lr_scheduler = lr_scheduler
 model.metrics = [mts() for mts in metrics_list]
+model.optimizer = optimizer
+
 model = model.to(device)
 
 print(model)
 
-# setup the model and the optimizer
-trainer.setup(model=model, optimizer_cls=optimizer_cls, optimizer_args=optimizer_args, scheduler_cls=scheduler_cls, scheduler_args=scheduler_args, checkpoint=checkpoint)
 
 # log
 logging.info(f'Model and Fabric Trainer inizialized')
@@ -325,15 +335,13 @@ logging.info(f'Model and Fabric Trainer inizialized')
 logging.info(f'Training the model')
 
 # fit the model
-trainer.fit(train_loader=train_loader, val_loader=valid_loader)
+trainer.fit(model, train_loader, valid_loader, ckpt_path=checkpoint)
 
 # log
 logging.info(f'Model trained')
 
 # save the model to disk
 torch.save(model.state_dict(), f=last_model)
-#trainer.fabric.save(path=last_model, state={'model':trainer.model, - TODO the torch.load during inference doesn't work with this method
-    #'optimizer':trainer.optimizer, 'scheduler': trainer.scheduler_cfg})
 
 # log
 logging.info(f'Last model saved to {last_model}')

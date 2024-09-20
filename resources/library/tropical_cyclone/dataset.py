@@ -183,9 +183,6 @@ class TCGraphDataset(Dataset_PyG):
             shutil.rmtree(self.processed_dir)
         except OSError as e:
             print(f"Error in cleaning dummy folder: {e.strerror}")
-        
-        # Loads the stored dataset in self.data, or self._data(with this method of loading you should make the get retrieve the value from this)
-        #self.load(self.processed_paths[0])
     
     @property
     def raw_dir(self) -> str:
@@ -206,8 +203,6 @@ class TCGraphDataset(Dataset_PyG):
     # Process zarr data into graphs and save it into the processed_dir folder
     def process(self) -> None:
         x_data, y_data = self.__prepare_zarr()
-        #print("\t", x_data.shape)
-        #print("\t", y_data.shape)
         
         # Adjacency structure is the same for all 40x40 grids
         edge_index = self.__get_adjacency_info(x_data[0, 0])

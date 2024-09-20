@@ -6,13 +6,18 @@ import torch.nn as nn
 import torch
 import torch_geometric
 from torch_geometric.utils import dropout_edge
-
-# Provenance logger
+'''
+# Provenance logger (needed only when working with graph representations)
+try:
+    import sys
+    sys.path.append('../../ProvML')
+    import prov4ml
+except ImportError:
+    print('Library prov4ml not found, keep executing...')
+'''
 import sys
 sys.path.append('../../ProvML')
-# import prov4ml
-
-
+import prov4ml
 
 class BaseLightningModule(L.LightningModule):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -268,6 +273,9 @@ class BaseLightningModuleGNN(pl.LightningModule):
         # log the outputs
         self.callback_metrics = {**self.callback_metrics, **log_dict}
         
+        # log the train_loss
+        self.log('train_loss', loss)
+        
         return {'loss':loss}
 
     def validation_step(self, batch, batch_idx):
@@ -286,7 +294,16 @@ class BaseLightningModuleGNN(pl.LightningModule):
         # log the outputs
         self.callback_metrics = {**self.callback_metrics, **log_dict}
         
+        # log the val_loss
+        self.log('val_loss', loss)
+        
         return {'loss':loss}
+    
+    def configure_optimizers(self):
+        return {
+            "optimizer": self.optimizer,
+            "lr_scheduler": self.lr_scheduler,
+        }
 
     def on_validation_model_eval(self) -> None:
         self.eval()
@@ -338,31 +355,3 @@ class GraphUNet(BaseLightningModuleGNN):
         x = F.dropout(data.x, p=self.node_dropout_rate, training=self.training)
         x = self.unet(x, edge_index)
         return self.activation(x)
-
-
-
-class GAT(BaseLightningModuleGNN):
-    def __init__(self,
-            in_channels: int,
-            hid_channels: int,
-            num_layers: int,
-            out_channels: int,
-            dropout: float = 0.0,
-            act_first: bool = False,
-            final_act: str = 'nn.Sigmoid()',
-            *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-        
-        self.final_act = eval(final_act)
-        self.model = torch_geometric.nn.GAT(in_channels=in_channels,
-                                            hidden_channels=hid_channels,
-                                            num_layers=num_layers,
-                                            out_channels=out_channels,
-                                            dropout=dropout,
-                                            act_first=act_first)
-            
-    def forward(self, data):
-        edge_index, _ = dropout_edge(data.edge_index, p=self.edge_dropout_rate, force_undirected=True, training=self.training)
-        x = F.dropout(data.x, p=self.node_dropout_rate, training=self.training)
-        x = self.model(x, edge_index)
-        return self.final_act(x)

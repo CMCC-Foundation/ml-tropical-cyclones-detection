@@ -3,6 +3,7 @@
 #                         Author : Davide Donno
 #               Process the dataset into patches and store 
 #                them to disk in the preferred data format
+#               (multiprocessing version, no MPI required)
 #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 import pandas as pd

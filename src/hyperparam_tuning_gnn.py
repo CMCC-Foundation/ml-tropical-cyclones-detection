@@ -12,13 +12,14 @@ from torch.utils.data.distributed import DistributedSampler
 from torch_geometric.loader import DataLoader
 
 import argparse
-import logging
 import joblib
-import shutil
+import logging
 import munch
-import toml
 import os
 import pickle
+import re
+import shutil
+import toml
 
 import warnings
 warnings.simplefilter("ignore")
@@ -35,7 +36,7 @@ sys.path.append('../resources/library')
 import tropical_cyclone as tc
 from tropical_cyclone.trainer import FabricTrainer
 from tropical_cyclone.tester import GraphTester
-from tropical_cyclone.callbacks import DiscordLog, FabricBenchmark, FabricCheckpoint
+from tropical_cyclone.callbacks import DiscordLog
 from tropical_cyclone.dataset import TCGraphDataset
 
 # Provenance logger
@@ -102,7 +103,7 @@ experiment_dir = config.dir.experiment
 scaler_fpath = config.dir.scaler
 webhook_url = config.dir.webhook if hasattr(config.dir, 'webhook') else None
 checkpoint = config.dir.checkpoint if hasattr(config.dir, 'checkpoint') else None
-train_src = config.dir.valid
+train_src = config.dir.train
 valid_src = config.dir.valid
 
 # pytorch
@@ -125,8 +126,9 @@ loss_cls = eval(config.loss.cls)
 loss_args = dict(config.loss.args)
 
 # optimizer
-optimizer_cls = config.optimizer.cls
-optimizer_args = dict(config.optimizer.args)
+optimizer_params = {}
+for optim_cls in config.optimizer.cls:
+    optimizer_params[optim_cls.split('.')[2]] = dict(config.optimizer[optim_cls.split('.')[2]])
 
 # scheduler
 scheduler_cls = eval(config.scheduler.cls) if hasattr(config.scheduler, 'cls') else None
@@ -152,7 +154,7 @@ n_samples = config.train.n_samples if hasattr(config.train,'n_samples') else Non
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
 # set the device
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cuda')
 torch.set_float32_matmul_precision(matmul_precision)
 
 # define important directories
@@ -163,7 +165,6 @@ checkpoint_dir = os.path.join(run_dir, 'checkpoints')
 # define important filenames
 benchmark_csv = os.path.join(run_dir, 'benchmark.csv')
 last_model = os.path.join(run_dir, 'last_model.pt')
-results_file = os.path.join(logging_dir, 'results.txt')
 
 # create experiment directory
 os.makedirs(experiment_dir, exist_ok=True)
@@ -190,8 +191,6 @@ scaler = joblib.load(scaler_fpath)
 
 # define user callbacks
 callbacks = [
-    FabricCheckpoint(dst=checkpoint_dir, monitor='val_loss', verbose=False), 
-    FabricBenchmark(filename=benchmark_csv), 
     DiscordLog(webhook_url=webhook_url, benchmark_csv=benchmark_csv, msg_every_n_epochs=10, plot_every_n_epochs=10), 
 ]
 
@@ -221,8 +220,8 @@ search_params = model_args.copy()
 
 search_params['batch_size'] = batch_size
 search_params['epochs'] = epochs
-search_params['optimizer_cls'] = optimizer_cls
-search_params['learning_rate'] = optimizer_args['lr']
+search_params['optimizer_cls'] = config.optimizer.cls
+search_params['optimizer_params'] = optimizer_params
 
 # convert to list the arguments that are not lists yet
 search_params.update((idx, val) if isinstance(val, list) else (idx, [val]) for idx,val in search_params.items())
@@ -231,11 +230,31 @@ search_params.update((idx, val) if isinstance(val, list) else (idx, [val]) for i
 results = {}
 
 for params in ParameterGrid(search_params):
-    print(params)
     
     # post-permutation operations
+    # Extract the optimizer's args for the optimizer
+    optimizer_args = params['optimizer_params'][params['optimizer_cls'].split('.')[2]]
+    # Remove the list of all the arguments (We replace it by the exact set of args for the optimizer)
+    params.pop('optimizer_params')
+    params['optimizer_args'] = optimizer_args
+    # Extract the name of the version of the optimizer configuration
+    postfix = re.match(r'^[^_]+(_(\w+.*))?$', params['optimizer_cls'])
+    
+    # If there is a versioan name after "_" in the name of the optimizer class, add the name to the params dict.
+    if postfix[2] != None: 
+        params['optimizer_cls_version'] = postfix[2]
+    else:
+        params['optimizer_cls_version'] = "__"
+
+    # saving the torch.optim.* without versions
+    optimizer_cls = params['optimizer_cls'].split('_')[0]
+
+    # removing the "torch.optim." string from the optimizer name for more clearity in the resulting plots
+    params['optimizer_cls'] = params['optimizer_cls'].split('.')[-1].split('_')[0]
+    
     str_params = str(params)
-    optimizer_args['lr'] = params['learning_rate']
+    print("Hyperparamers in this section:\n", str_params, "\n")
+    
     for key in model_args:
         if key in params:
             model_args[key] = params[key]
@@ -321,7 +340,7 @@ for params in ParameterGrid(search_params):
     model = model.to(device)
 
     # setup the model and the optimizer
-    trainer.setup(model=model, optimizer_cls=eval(params['optimizer_cls']), optimizer_args=optimizer_args, scheduler_cls=scheduler_cls, scheduler_args=scheduler_args, checkpoint=checkpoint)
+    trainer.setup(model=model, optimizer_cls=eval(optimizer_cls), optimizer_args=optimizer_args, scheduler_cls=scheduler_cls, scheduler_args=scheduler_args, checkpoint=checkpoint)
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
