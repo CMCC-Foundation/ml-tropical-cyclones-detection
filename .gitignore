@@ -4,3 +4,4 @@ data
 experiments
 .DS_Store
 dynamicopy*
+experimental/*
