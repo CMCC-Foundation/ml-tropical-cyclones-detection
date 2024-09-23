@@ -5,3 +5,5 @@ experiments
 .DS_Store
 dynamicopy*
 experimental/*
+tmp*
+zenodo_bourdin*
