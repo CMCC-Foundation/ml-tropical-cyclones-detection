@@ -4,12 +4,14 @@ import torch
 
 from typing import Any, List, Tuple, Union
 import xarray as xr
+import numpy as np
 import logging
 import shutil
 import glob
 import os
 
 from tropical_cyclone.utils import coo_rot180, coo_left_right, coo_up_down
+from tropical_cyclone.inference import Inference
 from tropical_cyclone.scaling import Scaler
 
 
@@ -156,6 +158,7 @@ class TCPatchDataset(Dataset_torch):
         return x
 
 
+    
 class TCGraphDataset(Dataset_PyG):
     def __init__(self,
                  src: str,
@@ -200,17 +203,17 @@ class TCGraphDataset(Dataset_PyG):
     def processed_file_names(self) -> Union[str, List[str], Tuple[str, ...]]:
         return ['dummy']
     
-    # Process zarr data into graphs and save it into the processed_dir folder
+    # convert Zarr data into graphs
     def process(self) -> None:
-        x_data, y_data = self.__prepare_zarr()
+        x_data, y_data = self._prepare_data()
         
         # Adjacency structure is the same for all 40x40 grids
-        edge_index = self.__get_adjacency_info(x_data[0, 0])
+        edge_index = self._get_adjacency_info(x_data[0, 0])
         
         data_list = []
         
         for i in range(x_data.shape[0]):
-            # x[i] is reshaped from [6, 40, 40], so [C, H, W], to [W, H, C], to [W*H, C], in the same order as self__get_adjacency_info() does
+            # x[i] is reshaped from [6, 40, 40], so [C, H, W], to [W, H, C], to [W*H, C], in the same order as self_get_adjacency_info() does
             nodes_feats = x_data[i].permute(2, 1, 0).contiguous().view(-1, 6)
             nodes_labels = y_data[i].permute(2, 1, 0).contiguous().view(-1, 1)
             
@@ -233,7 +236,7 @@ class TCGraphDataset(Dataset_PyG):
         print(f"\t\tedge_index: {self.data_list[0].edge_index.shape}")
         print(f"\t\ty: {self.data_list[0].y.shape}")
         
-    def __get_adjacency_info(self, x_data) -> torch.Tensor:
+    def _get_adjacency_info(self, x_data) -> torch.Tensor:
         width = x_data.shape[1]
         height = x_data.shape[0]
         coo_links = [[], []]
@@ -263,7 +266,8 @@ class TCGraphDataset(Dataset_PyG):
         
         return torch.tensor(coo_links, dtype=torch.long)
     
-    def __prepare_zarr(self) -> Tuple[torch.Tensor, torch.Tensor]:
+    # read Zarr and put together the different types of patches
+    def _prepare_data(self) -> Tuple[torch.Tensor, torch.Tensor]:
         # Get dataset filenames
         cy_files = sorted(glob.glob(os.path.join(self.raw_dir, 'cyclone*.zarr')))
         if (self.split == 'test'):
@@ -295,10 +299,10 @@ class TCGraphDataset(Dataset_PyG):
 
             # Same for the y
             if 'density_map_tc' in self.targets:
-                y_cy_data = self.__augment_y_density_map_tc(y_cy_data)
+                y_cy_data = self._augment_y_density_map_tc(y_cy_data)
             elif 'patch_cyclone' in self.targets:
                 patch_size = x_cy_data.shape[2]
-                y_cy_data = self.__augment_y_patch_cyclone(y_cy_data, patch_size)
+                y_cy_data = self._augment_y_patch_cyclone(y_cy_data, patch_size)
             
             print(f"\taugmentation of {self.split} dataset: done!")
         
@@ -332,13 +336,13 @@ class TCGraphDataset(Dataset_PyG):
         
         return x_data, y_data
    
-    def __augment_y_density_map_tc(self, y_data) -> torch.Tensor:
+    def _augment_y_density_map_tc(self, y_data) -> torch.Tensor:
         y_rot180 = torch.rot90(y_data, k=2, dims=(2, 3))
         y_flipud = torch.flip(y_data, dims=(2,))
         y_fliplr = torch.flip(y_data, dims=(3,))
         return torch.concat([y_data, y_rot180, y_flipud, y_fliplr], dim=0)
     
-    def __augment_y_patch_cyclone(self, y_data, patch_size) -> torch.Tensor:
+    def _augment_y_patch_cyclone(self, y_data, patch_size) -> torch.Tensor:
         y_rot180 = torch.clone(y_data)
         y_flipud = torch.clone(y_data)
         y_fliplr = torch.clone(y_data)
@@ -366,6 +370,54 @@ class TCGraphDataset(Dataset_PyG):
     
     def len(self) -> int:
         return len(self.data_list)
+    
+
+
+class TCGraphDatasetInference(TCGraphDataset):
+    # override
+    # no need for augmentation in the final inference, but the initial NetCDF information is needed
+    def __init__(self,
+                 src: str,
+                 year: str,
+                 drivers: List[str],
+                 targets: List[str],
+                 scaler = None):
+            
+            # inference object for dataset loading
+            inference_obj = Inference() # TODO check if I need to set the gpu up here
+            self.ds, self.dates = inference_obj.load_dataset(dataset_dir=src, drivers=drivers, year=year) # TODO am i using both ds and dates?
+            
+            # sets up the parent __init__() and launches the child class process()
+            super().__init__(src='Inference', drivers=drivers, targets=targets, scaler=scaler)
+    
+    # override
+    # convert NetCDF data into graphs, without y and with time and global coordinates united
+    def process(self) -> None:
+        x_data = self._prepare_data()
+        print(x_data.shape)
+
+    # override
+    # read NetCDF and group it by time, global rows and global columns
+    def _prepare_data(self, patch_size=40) -> torch.Tensor:
+        # get dimensions of the data
+        lons = self.ds['lon'].shape[0]
+        lats = self.ds['lat'].shape[0]
+        rows = lats // patch_size
+        cols = lons // patch_size
+        time, channels = self.ds['time'].shape[0], len(self.drivers)
+        
+        # divide dataset in patches
+        patch_ds = self.ds.coarsen({'lat':patch_size, 'lon':patch_size}, boundary="trim").construct({'lon':("cols", "lon_range"), 'lat':("rows", "lat_range")})
+        # load dataset to numpy
+        x = patch_ds[self.drivers].to_array().load().data
+        # transpose drivers to last channel
+        x = np.transpose(x, axes=(1,2,3,4,5,0))
+        # put rows and cols channels near time dimension
+        x = np.transpose(x, axes=(0,1,3,2,4,5))
+        # reshape aggregating time, rows and cols
+        x = np.reshape(x, newshape=(time*rows*cols, patch_size, patch_size, channels))
+        return x
+
     
 ## TODO: NON CANCELLARE
 # class InterTwinTrainvalCycloneDataset(Dataset):

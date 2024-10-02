@@ -340,12 +340,6 @@ trainer.fit(model, train_loader, valid_loader, ckpt_path=checkpoint)
 # log
 logging.info(f'Model trained')
 
-# save the model to disk
-torch.save(model.state_dict(), f=last_model)
-
-# log
-logging.info(f'Last model saved to {last_model}')
-
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
 
