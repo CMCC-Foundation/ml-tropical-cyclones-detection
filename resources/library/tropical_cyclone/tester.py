@@ -13,14 +13,14 @@ class GraphTester:
         device: torch.device,
         loader: torch_geometric.loader.DataLoader,
         model: tc.models.BaseLightningModuleGNN,
-        n_cyclones: int,
-        nodes_per_graph: int
+        nodes_per_graph: int,
+        n_cyclones: int = None
     ):
         self.device = device
         self.loader = loader
         self.model = model
-        self.n_cyclones = n_cyclones
         self.nodes_per_graph = nodes_per_graph
+        self.n_cyclones = n_cyclones
     
     @torch.no_grad()
     def get_metrics(self,
@@ -48,7 +48,7 @@ class GraphTester:
             end = self.nodes_per_graph
             
             # iterate over every patch in the batch
-            while start != batch.y.shape[0]:
+            while start != (self.nodes_per_graph*len(batch)):
                 max_pred, id_pred = torch.max(pred[start:end], 0)
                 _, id_target = torch.max(batch.y[start:end], 0)
 
@@ -135,3 +135,39 @@ class GraphTester:
             'zero_division': zero_division
         }
         return metrics
+    
+    # gets the coordinates from the y predictions in the format [B, 2]
+    @torch.no_grad()
+    def get_inference_y(self,
+                        threshold: float = 0.4) -> np.ndarray:
+
+        tot_pred = np.empty(shape=(0, 2))
+
+        self.model.eval()
+
+        for batch in tqdm(self.loader, desc="Inference on the test set", unit="batch"):
+            batch = batch.to(self.device)
+            pred = self.model(batch)
+
+            start, end = 0, self.nodes_per_graph
+
+            # iterate over every patch in the batch
+            while start != (self.nodes_per_graph*len(batch)):
+                max_pred, id_pred = torch.max(pred[start:end], 0)
+
+                # cyclone not found coordinates
+                row_pred, col_pred = -1, -1
+
+                # cyclone found
+                if max_pred > threshold:
+                    # retrieve cyclone 40x40 coordinates
+                    row_pred = (id_pred % 40).cpu().item()
+                    col_pred = (id_pred // 40).cpu().item()
+
+                this_pred = np.array([[row_pred, col_pred]])
+                tot_pred = np.concatenate([tot_pred, this_pred])
+
+                start = end
+                end += self.nodes_per_graph
+        
+        return tot_pred
