@@ -11,8 +11,9 @@ import glob
 import os
 
 from tropical_cyclone.utils import coo_rot180, coo_left_right, coo_up_down
-from tropical_cyclone.inference import Inference
+from tropical_cyclone.inference import Inference, get_detections
 from tropical_cyclone.scaling import Scaler
+from tropical_cyclone.cyclone import retrieve_predicted_tc
 
 
 
@@ -175,7 +176,7 @@ class TCGraphDataset(Dataset_PyG):
         self.dtype = dtype
         
         self.split = self.src.split("/")[-1]
-        self.data_list = None
+        self.data_list = []
         self.n_cy = -1
         
         # Trigger self.process()
@@ -207,29 +208,26 @@ class TCGraphDataset(Dataset_PyG):
     def process(self) -> None:
         x_data, y_data = self._prepare_data()
         
-        # Adjacency structure is the same for all 40x40 grids
+        # adjacency structure is the same for all 40x40 grids
         edge_index = self._get_adjacency_info(x_data[0, 0])
-        
-        data_list = []
         
         for i in range(x_data.shape[0]):
             # x[i] is reshaped from [6, 40, 40], so [C, H, W], to [W, H, C], to [W*H, C], in the same order as self_get_adjacency_info() does
             nodes_feats = x_data[i].permute(2, 1, 0).contiguous().view(-1, 6)
             nodes_labels = y_data[i].permute(2, 1, 0).contiguous().view(-1, 1)
             
-            # Create and append the Data object
+            # create and append the Data object
             data = Data(
                 x=nodes_feats,
                 edge_index=edge_index,
                 y=nodes_labels
             )
             
-            # If scaler exists, transform the data now for faster training later
+            # if scaler exists, transform the data now for faster training later
             if self.scaler != None:
                 data.x = torch.tensor(self.scaler.transform(data.x), dtype=self.dtype)
-            data_list.append(data)
+            self.data_list.append(data)
         
-        self.data_list = data_list
         print(f"\t{self.split} dataset created with {self.len()} elements!")
         print(f"\tshape of elements:")
         print(f"\t\tx: {self.data_list[0].x.shape}")
@@ -382,10 +380,11 @@ class TCGraphDatasetInference(TCGraphDataset):
                  drivers: List[str],
                  targets: List[str],
                  scaler = None):
-            
-            # inference object for dataset loading
-            inference_obj = Inference() # TODO check if I need to set the gpu up here
-            self.ds, self.dates = inference_obj.load_dataset(dataset_dir=src, drivers=drivers, year=year) # TODO am i using both ds and dates?
+        
+            # inference object for loading and storing data
+            self.inference_obj = Inference()
+            self.ds, _ = self.inference_obj.load_dataset(dataset_dir=src, drivers=drivers, year=year)
+            self.year = year
             
             # sets up the parent __init__() and launches the child class process()
             super().__init__(src='Inference', drivers=drivers, targets=targets, scaler=scaler)
@@ -393,8 +392,33 @@ class TCGraphDatasetInference(TCGraphDataset):
     # override
     # convert NetCDF data into graphs, without y and with time and global coordinates united
     def process(self) -> None:
-        x_data = self._prepare_data()
-        print(x_data.shape)
+        # get x tensor with format [time*rows*cols, channels, patch_size, patch_size]
+        x = self._prepare_data()
+        
+        # function inherited from parent class
+        edge_index = self._get_adjacency_info(x[0, 0])
+        
+        # iterate over the time*rows*cols dimension
+        for i in range(x.shape[0]):
+            # x[i] is reshaped from [C, H, W] to [W*H, C], in the same order as self_get_adjacency_info() does # TODO I'm not 100% sure that I start with [C, H, W] or [C, W, H]
+            nodes_feats = x[i].permute(2, 1, 0).contiguous().view(-1, 6)
+            
+            # create and append the Data object
+            data = Data(
+                x=nodes_feats,
+                edge_index=edge_index,
+                y=None
+            )
+            
+            # If scaler exists, transform the data now for faster training later
+            if self.scaler != None:
+                data.x = torch.tensor(self.scaler.transform(data.x), dtype=self.dtype)
+            self.data_list.append(data)
+        
+        print(f"\t{self.split} dataset for year {self.year} created with {self.len()} elements!")
+        print(f"\tshape of elements:")
+        print(f"\t\tx: {self.data_list[0].x.shape}")
+        print(f"\t\tedge_index: {self.data_list[0].edge_index.shape}")
 
     # override
     # read NetCDF and group it by time, global rows and global columns
@@ -410,13 +434,37 @@ class TCGraphDatasetInference(TCGraphDataset):
         patch_ds = self.ds.coarsen({'lat':patch_size, 'lon':patch_size}, boundary="trim").construct({'lon':("cols", "lon_range"), 'lat':("rows", "lat_range")})
         # load dataset to numpy
         x = patch_ds[self.drivers].to_array().load().data
-        # transpose drivers to last channel
-        x = np.transpose(x, axes=(1,2,3,4,5,0))
-        # put rows and cols channels near time dimension
-        x = np.transpose(x, axes=(0,1,3,2,4,5))
+        # organize data like this: [time, rows, cols, channels, patch_size, patch_size]
+        x = np.transpose(x, axes=(1,2,4,0,3,5))
         # reshape aggregating time, rows and cols
-        x = np.reshape(x, newshape=(time*rows*cols, patch_size, patch_size, channels))
-        return x
+        x = np.reshape(x, newshape=(time*rows*cols, channels, patch_size, patch_size))
+        
+        # save in dataset class for later use
+        self.time = time
+        self.rows = rows
+        self.cols = cols
+        self.patch_ds = patch_ds
+        self.patch_size = patch_size
+        
+        return torch.as_tensor(x)
+    
+    # post-process operations to extract the final cyclone coordinates with time
+    def post_process(self, tot_pred: np.ndarray) -> None:
+        
+        # reshape predictions to [time, rows, cols, 2]
+        tot_pred = np.reshape(tot_pred, newshape=(self.time, self.rows, self.cols, 2))
+        
+        # retrieves the latitude-longitude coordinates from the predicted TCs
+        patch_ds = retrieve_predicted_tc(tot_pred, self.ds, self.patch_ds, self.patch_size)
+        
+        # gets the dataframe with ISO_TIME, LAT, LON, and WS
+        self.detections = get_detections(patch_ds)
+    
+    # store the post-processed detections on the filesystem
+    def store_detections(self, dst: str) -> None:
+        self.inference_obj.store_detections(self.detections, dst)
+        
+        
 
     
 ## TODO: NON CANCELLARE
