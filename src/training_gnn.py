@@ -38,8 +38,13 @@ from tropical_cyclone.callbacks import DiscordLog
 from tropical_cyclone.dataset import TCGraphDataset
 
 # Provenance logger
-sys.path.append('../../ProvML')
-import prov4ml
+try:
+    import sys
+    sys.path.append('../../yProvML')
+    import prov4ml
+except ImportError:
+    print('Library prov4ml not found, halting execution...')
+    exit(0)
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 

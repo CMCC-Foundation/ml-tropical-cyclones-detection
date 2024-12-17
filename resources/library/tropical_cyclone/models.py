@@ -6,18 +6,14 @@ import torch.nn as nn
 import torch
 import torch_geometric
 from torch_geometric.utils import dropout_edge
-'''
-# Provenance logger (needed only when working with graph representations)
+
+# Provenance logger (needed only when working with GNNs)
 try:
     import sys
-    sys.path.append('../../ProvML')
+    sys.path.append('../../yProvML')
     import prov4ml
 except ImportError:
     print('Library prov4ml not found, keep executing...')
-'''
-import sys
-sys.path.append('../../ProvML')
-import prov4ml
 
 class BaseLightningModule(L.LightningModule):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
