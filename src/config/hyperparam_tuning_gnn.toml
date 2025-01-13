@@ -3,7 +3,7 @@ seed = 12368
 
 [dir]
 experiment = '../experiments'
-run = '../experiments/graphunet_hyperparam_tuning_h2'
+run = '../experiments/graphunet_hyperparam_tuning'
 scaler = '../data/scalers/standard.dump'
 train = '../data/patches/train'
 valid = '../data/patches/valid'
@@ -45,8 +45,7 @@ cls = 'nn.BCELoss'
 # Format: 'torch.optim.Adam[_optional name]'
 # Example: 'torch.optim.Adam_Version1', 'torch.optim.Adagrad_test_number_2'.
 
-#cls = ['torch.optim.Adam', 'torch.optim.Adam_v1', 'torch.optim.Adagrad', 'torch.optim.SGD', 'torch.optim.RMSprop', 'torch.optim.Adadelta', 'torch.optim.NAdam', 'torch.optim.Adamax']
-#
+cls = ['torch.optim.Adam', 'torch.optim.Adam_v1', 'torch.optim.Adagrad', 'torch.optim.SGD', 'torch.optim.RMSprop', 'torch.optim.Adadelta', 'torch.optim.NAdam', 'torch.optim.Adamax']
 
   [optimizer.Adam]
   lr = 0.001
