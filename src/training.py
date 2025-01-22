@@ -1,12 +1,8 @@
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 #  Program imports
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-
-from lightning.pytorch.strategies.deepspeed import DeepSpeedStrategy
-from lightning.pytorch.strategies.fsdp import FSDPStrategy
-from lightning.pytorch.strategies.ddp import DDPStrategy
-
 from lightning.pytorch.utilities.model_summary import ModelSummary
+from lightning.pytorch.strategies.ddp import DDPStrategy
 from lightning.pytorch.callbacks import ModelCheckpoint
 from torch.utils.data import DataLoader
 from torch.optim import lr_scheduler
@@ -36,7 +32,7 @@ sys.path.append('../resources/library')
 from tropical_cyclone.models import *
 from tropical_cyclone.scaling import StandardScaler
 from tropical_cyclone.dataset import TCPatchDataset
-from tropical_cyclone.callbacks import DiscordLog, BenchmarkCSV
+from tropical_cyclone.callbacks import BenchmarkCSV
 from tropical_cyclone.sampler import DistributedWeightedSampler
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
@@ -96,12 +92,10 @@ seed = config.run.seed
 # directories
 run_dir = config.dir.run
 experiment_dir = config.dir.experiment
-webhook_url = config.dir.webhook if hasattr(config.dir, 'webhook') else None
 checkpoint = config.dir.checkpoint if hasattr(config.dir, 'checkpoint') else None
 train_src = config.dir.train
 valid_src = config.dir.valid
-mean_src = config.dir.scaler.mean
-std_src = config.dir.scaler.std
+scaler_src = config.dir.scaler
 
 # pytorch
 dtype = eval(config.torch.dtype)
@@ -110,9 +104,9 @@ matmul_precision = config.torch.matmul_precision
 # lightning
 accelerator = config.lightning.accelerator
 precision = config.lightning.precision
-strategy_name = config.lightning.strategy if hasattr(config.lightning, 'strategy') else 'ddp'
 
 # model
+model_type = config.model.type
 model_cls = eval(config.model.cls)
 model_args = dict(config.model.args)
 
@@ -135,14 +129,12 @@ scheduler_annealing_args = config.scheduler.annealing
 drivers = config.data.drivers
 targets = config.data.targets
 label_no_cyclone = config.data.label_no_cyclone if hasattr(config.data, 'label_no_cyclone') else -1.0
-only_one_coo = config.data.only_one_coo if hasattr(config.data, 'only_one_coo') else None
 
 # train
 epochs = config.train.epochs
 batch_size = config.train.batch_size
 drop_remainder = config.train.drop_remainder
 accumulation_steps = config.train.accumulation_steps
-n_samples = config.train.n_samples if hasattr(config.train,'n_samples') else None
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
@@ -151,10 +143,8 @@ n_samples = config.train.n_samples if hasattr(config.train,'n_samples') else Non
 #  Environment setup
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
-device = 'cpu'
 # set the device
-if torch.cuda.is_available():
-    device = 'cuda'
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 torch.set_float32_matmul_precision(matmul_precision)
 
 # define important directories
@@ -183,13 +173,12 @@ shutil.copy(src=args.config, dst=os.path.join(run_dir, 'configuration.toml'))
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
 # load scaler
-x_scaler = StandardScaler(mean_src=mean_src, std_src=std_src, drivers=drivers)
+scaler = StandardScaler(src=scaler_src, drivers=drivers)
 
 # define user callbacks
 callbacks = [
     ModelCheckpoint(checkpoint_dir, "epoch-{epoch:04d}-val_loss-{val_loss:.2f}", monitor='val_loss', save_last=True, save_top_k=5, auto_insert_metric_name=False), 
     BenchmarkCSV(filename=benchmark_csv), 
-    DiscordLog(model_name=os.path.basename(run_dir), webhook_url=webhook_url, benchmark_csv=benchmark_csv, msg_every_n_epochs=1, plot_every_n_epochs=10), 
 ]
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
@@ -200,15 +189,7 @@ callbacks = [
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
 # init distribution strategy
-if accelerator == 'cuda':
-    if strategy_name == 'deepspeed':
-        strategy = DeepSpeedStrategy(zero_optimization=True, stage=1, load_full_weights=True)
-    elif strategy_name == 'ddp':
-        strategy = DDPStrategy()
-    elif strategy_name == 'fsdp':
-        strategy = FSDPStrategy(sharding_strategy="NO_SHARD")
-else:
-    strategy = 'auto'
+strategy = DDPStrategy() if accelerator == 'cuda' else 'auto'
 
 # initialize trainer
 trainer = Trainer(
@@ -261,17 +242,21 @@ logging.info(f"   Local rank  : {local_rank}")
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
 # init model
-model = model_cls(**model_args)
+model: nn.Module = model_cls(**model_args)
+
 # init optimizer
 optimizer = optimizer_cls(model.parameters(), **optimizer_args)
+
 # init scheduler
 verbose = True if global_rank == 0 else False
+warmup_epochs = scheduler_warmup_args['total_iters']
 warmup = lr_scheduler.LinearLR(optimizer=optimizer, **scheduler_warmup_args, verbose=verbose)
 annealing = lr_scheduler.CosineAnnealingWarmRestarts(optimizer=optimizer, T_0=epochs+1, **scheduler_annealing_args, verbose=verbose)
-lr_scheduler = lr_scheduler.SequentialLR(optimizer=optimizer, schedulers=[warmup, annealing], milestones=[scheduler_warmup_args['total_iters']], verbose=verbose)
+scheduler = lr_scheduler.SequentialLR(optimizer=optimizer, schedulers=[warmup, annealing], milestones=[warmup_epochs], verbose=verbose)
+
 # add attributes to the model
 model.optimizer = optimizer
-model.lr_scheduler = lr_scheduler
+model.lr_scheduler = scheduler
 model.loss = loss_cls(**loss_args)
 model.metrics = [mts() for mts in metrics_list]
 
@@ -291,8 +276,8 @@ logging.info(f'Model and Trainer inizialized')
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
 # init train and validation datasets
-train_dataset = TCPatchDataset(src=train_src, drivers=drivers, targets=targets, scaler=x_scaler, label_no_cyclone=label_no_cyclone, augmentation=True, only_one_coo=only_one_coo, dtype=dtype)
-valid_dataset = TCPatchDataset(src=valid_src, drivers=drivers, targets=targets, scaler=x_scaler, label_no_cyclone=label_no_cyclone, augmentation=True, only_one_coo=only_one_coo, dtype=dtype)
+train_dataset = TCPatchDataset(src=train_src, drivers=drivers, targets=targets, scaler=scaler, label_no_cyclone=label_no_cyclone, augmentation=True, dtype=dtype)
+valid_dataset = TCPatchDataset(src=valid_src, drivers=drivers, targets=targets, scaler=scaler, label_no_cyclone=label_no_cyclone, augmentation=True, dtype=dtype)
 
 # log
 logging.info(f'Train and valid datasets inizialized')

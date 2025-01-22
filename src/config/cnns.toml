@@ -1,5 +1,5 @@
 [run]
-seed = 78231
+seed = 42
 
 [dir]
 experiment = '../experiments'
@@ -24,6 +24,7 @@ targets = ['patch_cyclone']
 label_no_cyclone = -1.0
 
 [model]
+type = 'cnn'
 monitor = 'val_loss'
 cls = 'VGG_V3'
 metrics = []

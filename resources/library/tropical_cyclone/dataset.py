@@ -35,11 +35,10 @@ def read_zarrs_as_torch_tensor(zarrs: List[xr.Dataset], variables: List[str], dt
 
 
 class TCPatchDataset(Dataset_torch):
-    def __init__(self, src: str, drivers: List[str], targets: List[str], scaler: Scaler = None, label_no_cyclone: float = -1.0, augmentation: bool = False, only_one_coo: str = None, dtype = torch.float32) -> None:
+    def __init__(self, src: str, drivers: List[str], targets: List[str], scaler: Scaler = None, label_no_cyclone: float = -1.0, augmentation: bool = False, dtype = torch.float32) -> None:
         super().__init__()
         # store params
         self.label_no_cyclone = label_no_cyclone
-        self.only_one_coo = only_one_coo
         self.augmentation = augmentation
         self.scaler: Scaler = scaler
         self.dtype = dtype
@@ -82,12 +81,7 @@ class TCPatchDataset(Dataset_torch):
         y = self._apply_no_cyclone_label(y)
         # cast the tensor to desired dtype
         x, y = x.type(torch.float32), y.type(self.dtype)
-        if self.only_one_coo is None:
-            return x, y[0]
-        elif self.only_one_coo == 'x': 
-            return x, y[0,1]
-        elif self.only_one_coo == 'y': 
-            return x, y[0,0]
+        return x, y[0]
 
     def _apply_no_cyclone_label(self, y: torch.Tensor):
         return torch.where(y < 0, self.label_no_cyclone, y)
