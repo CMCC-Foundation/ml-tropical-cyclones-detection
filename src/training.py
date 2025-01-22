@@ -1,14 +1,10 @@
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 #  Program imports
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-
-from lightning.pytorch.strategies.deepspeed import DeepSpeedStrategy
-from lightning.pytorch.strategies.fsdp import FSDPStrategy
-from lightning.pytorch.strategies.ddp import DDPStrategy
-
 from lightning.pytorch.utilities.model_summary import ModelSummary
+from torch.utils.data.distributed import DistributedSampler
+from lightning.pytorch.strategies.ddp import DDPStrategy
 from lightning.pytorch.callbacks import ModelCheckpoint
-from torch.utils.data import DataLoader
 from torch.optim import lr_scheduler
 from lightning import Trainer
 import torch.nn as nn
@@ -35,9 +31,18 @@ import sys
 sys.path.append('../resources/library')
 from tropical_cyclone.models import *
 from tropical_cyclone.scaling import StandardScaler
-from tropical_cyclone.dataset import TCPatchDataset
-from tropical_cyclone.callbacks import DiscordLog, BenchmarkCSV
+from tropical_cyclone.callbacks import BenchmarkCSV
 from tropical_cyclone.sampler import DistributedWeightedSampler
+from tropical_cyclone.dataset import TCPatchDataset, TCGraphDataset
+
+# Provenance logger
+try:
+    import sys
+    sys.path.append('../../yProvML')
+    import prov4ml
+except ImportError:
+    print('Library prov4ml not found, halting execution...')
+    exit(0)
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
@@ -92,16 +97,15 @@ devices = args.devices
 
 # run
 seed = config.run.seed
+use_case = config.run.use_case # whether to use cnn or gnn training approach
 
 # directories
 run_dir = config.dir.run
 experiment_dir = config.dir.experiment
-webhook_url = config.dir.webhook if hasattr(config.dir, 'webhook') else None
 checkpoint = config.dir.checkpoint if hasattr(config.dir, 'checkpoint') else None
 train_src = config.dir.train
 valid_src = config.dir.valid
-mean_src = config.dir.scaler.mean
-std_src = config.dir.scaler.std
+scaler_src = config.dir.scaler
 
 # pytorch
 dtype = eval(config.torch.dtype)
@@ -110,7 +114,6 @@ matmul_precision = config.torch.matmul_precision
 # lightning
 accelerator = config.lightning.accelerator
 precision = config.lightning.precision
-strategy_name = config.lightning.strategy if hasattr(config.lightning, 'strategy') else 'ddp'
 
 # model
 model_cls = eval(config.model.cls)
@@ -135,14 +138,12 @@ scheduler_annealing_args = config.scheduler.annealing
 drivers = config.data.drivers
 targets = config.data.targets
 label_no_cyclone = config.data.label_no_cyclone if hasattr(config.data, 'label_no_cyclone') else -1.0
-only_one_coo = config.data.only_one_coo if hasattr(config.data, 'only_one_coo') else None
 
 # train
 epochs = config.train.epochs
 batch_size = config.train.batch_size
 drop_remainder = config.train.drop_remainder
 accumulation_steps = config.train.accumulation_steps
-n_samples = config.train.n_samples if hasattr(config.train,'n_samples') else None
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
@@ -151,10 +152,8 @@ n_samples = config.train.n_samples if hasattr(config.train,'n_samples') else Non
 #  Environment setup
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
-device = 'cpu'
 # set the device
-if torch.cuda.is_available():
-    device = 'cuda'
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 torch.set_float32_matmul_precision(matmul_precision)
 
 # define important directories
@@ -183,13 +182,12 @@ shutil.copy(src=args.config, dst=os.path.join(run_dir, 'configuration.toml'))
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
 # load scaler
-x_scaler = StandardScaler(mean_src=mean_src, std_src=std_src, drivers=drivers)
+scaler = StandardScaler(src=scaler_src, drivers=drivers)
 
 # define user callbacks
 callbacks = [
     ModelCheckpoint(checkpoint_dir, "epoch-{epoch:04d}-val_loss-{val_loss:.2f}", monitor='val_loss', save_last=True, save_top_k=5, auto_insert_metric_name=False), 
     BenchmarkCSV(filename=benchmark_csv), 
-    DiscordLog(model_name=os.path.basename(run_dir), webhook_url=webhook_url, benchmark_csv=benchmark_csv, msg_every_n_epochs=1, plot_every_n_epochs=10), 
 ]
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
@@ -200,33 +198,25 @@ callbacks = [
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
 # init distribution strategy
-if accelerator == 'cuda':
-    if strategy_name == 'deepspeed':
-        strategy = DeepSpeedStrategy(zero_optimization=True, stage=1, load_full_weights=True)
-    elif strategy_name == 'ddp':
-        strategy = DDPStrategy()
-    elif strategy_name == 'fsdp':
-        strategy = FSDPStrategy(sharding_strategy="NO_SHARD")
-else:
-    strategy = 'auto'
+strategy = DDPStrategy() if accelerator == 'cuda' else 'auto'
 
 # initialize trainer
 trainer = Trainer(
-    accelerator=accelerator, 
-    strategy=strategy, 
-    devices=devices, 
-    num_nodes=num_nodes, 
-    precision=precision, 
-    callbacks=callbacks, 
-    max_epochs=epochs, 
-    logger=None, 
-    enable_checkpointing=True, 
-    enable_progress_bar=True, 
-    accumulate_grad_batches=accumulation_steps, 
-    use_distributed_sampler=False, 
-    default_root_dir=run_dir, 
-    num_sanity_val_steps=0, 
-    enable_model_summary=False, 
+    accelerator = accelerator, 
+    strategy = strategy, 
+    devices = devices, 
+    num_nodes = num_nodes, 
+    precision = precision, 
+    callbacks = callbacks, 
+    max_epochs = epochs, 
+    logger = None, 
+    enable_checkpointing = True, 
+    enable_progress_bar = True, 
+    accumulate_grad_batches = accumulation_steps, 
+    use_distributed_sampler = False, 
+    default_root_dir = run_dir, 
+    num_sanity_val_steps = 0, 
+    enable_model_summary = False, 
 )
 
 # store parallel execution variables
@@ -257,21 +247,46 @@ logging.info(f"   Local rank  : {local_rank}")
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+#  Initialize provenance logger
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+
+prov_path = os.path.join(run_dir, "prov_path")
+os.makedirs(prov_path, exist_ok=True)
+
+prov4ml.start_run(
+    prov_user_namespace="www.example.org",
+    experiment_name="default", 
+    provenance_save_dir=prov_path, 
+    collect_all_processes=False,
+    save_after_n_logs=100,
+)
+
+logging.info(f"Prov4ML logger started running")
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 #  Initialize ML Model
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
 # init model
-model = model_cls(**model_args)
+prov4ml.log_param("model arguments", model_args)
+model: nn.Module = model_cls(**model_args)
+
 # init optimizer
 optimizer = optimizer_cls(model.parameters(), **optimizer_args)
+
 # init scheduler
 verbose = True if global_rank == 0 else False
+warmup_epochs = scheduler_warmup_args['total_iters']
 warmup = lr_scheduler.LinearLR(optimizer=optimizer, **scheduler_warmup_args, verbose=verbose)
 annealing = lr_scheduler.CosineAnnealingWarmRestarts(optimizer=optimizer, T_0=epochs+1, **scheduler_annealing_args, verbose=verbose)
-lr_scheduler = lr_scheduler.SequentialLR(optimizer=optimizer, schedulers=[warmup, annealing], milestones=[scheduler_warmup_args['total_iters']], verbose=verbose)
+scheduler = lr_scheduler.SequentialLR(optimizer=optimizer, schedulers=[warmup, annealing], milestones=[warmup_epochs], verbose=verbose)
+
 # add attributes to the model
 model.optimizer = optimizer
-model.lr_scheduler = lr_scheduler
+model.lr_scheduler = scheduler
 model.loss = loss_cls(**loss_args)
 model.metrics = [mts() for mts in metrics_list]
 
@@ -290,23 +305,50 @@ logging.info(f'Model and Trainer inizialized')
 #  Load and distribute dataset
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
-# init train and validation datasets
-train_dataset = TCPatchDataset(src=train_src, drivers=drivers, targets=targets, scaler=x_scaler, label_no_cyclone=label_no_cyclone, augmentation=True, only_one_coo=only_one_coo, dtype=dtype)
-valid_dataset = TCPatchDataset(src=valid_src, drivers=drivers, targets=targets, scaler=x_scaler, label_no_cyclone=label_no_cyclone, augmentation=True, only_one_coo=only_one_coo, dtype=dtype)
+if use_case == 'cnn':
+    # use case-specific import
+    from torch.utils.data import DataLoader
 
-# log
-logging.info(f'Train and valid datasets inizialized')
+    # init train and validation datasets
+    train_dataset = TCPatchDataset(src=train_src, drivers=drivers, targets=targets, scaler=scaler, label_no_cyclone=label_no_cyclone, augmentation=True, dtype=dtype)
+    valid_dataset = TCPatchDataset(src=valid_src, drivers=drivers, targets=targets, scaler=scaler, label_no_cyclone=label_no_cyclone, augmentation=True, dtype=dtype)
 
-# init train and val samplers
-train_sampler = DistributedWeightedSampler(dataset=train_dataset, num_replicas=world_size, rank=global_rank, shuffle=False)
-valid_sampler = DistributedWeightedSampler(dataset=valid_dataset, num_replicas=world_size, rank=global_rank, shuffle=False)
+    # log
+    logging.info(f'Train and valid datasets inizialized')
 
-# log
-logging.info(f'Dataset samplers initialized')
+    # init train and val samplers
+    train_sampler = DistributedWeightedSampler(dataset=train_dataset, num_replicas=world_size, rank=global_rank, shuffle=False)
+    valid_sampler = DistributedWeightedSampler(dataset=valid_dataset, num_replicas=world_size, rank=global_rank, shuffle=False)
 
-# load dataloader
-train_loader = DataLoader(train_dataset, sampler=train_sampler, batch_size=batch_size, drop_last=drop_remainder)
-valid_loader = DataLoader(valid_dataset, sampler=valid_sampler, batch_size=batch_size, drop_last=drop_remainder)
+    # log
+    logging.info(f'Dataset samplers initialized')
+
+    # load dataloader
+    train_loader = DataLoader(train_dataset, sampler=train_sampler, batch_size=batch_size, drop_last=drop_remainder)
+    valid_loader = DataLoader(valid_dataset, sampler=valid_sampler, batch_size=batch_size, drop_last=drop_remainder)
+elif use_case == 'gnn':
+    # use case-specific import
+    from torch_geometric.loader import DataLoader
+
+    # init train and validation datasets
+    train_dataset = TCGraphDataset(src=train_src, drivers=drivers, targets=targets, scaler=scaler, augmentation=True, dtype=dtype)
+    valid_dataset = TCGraphDataset(src=valid_src, drivers=drivers, targets=targets, scaler=scaler, augmentation=True, dtype=dtype)
+
+    # log
+    logging.info(f'Train and valid datasets inizialized')
+
+    # init train and val samplers
+    train_sampler = DistributedSampler(train_dataset, num_replicas=world_size, rank=global_rank, shuffle=False, drop_last=drop_remainder)
+    valid_sampler = DistributedSampler(valid_dataset, num_replicas=world_size, rank=global_rank, shuffle=False, drop_last=drop_remainder)
+
+    # log
+    logging.info(f'Dataset samplers initialized')
+
+    # load dataloader
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=drop_remainder)
+    valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=True, drop_last=drop_remainder)
+
+    pass
 
 # log
 logging.info(f'Dataloaders created')
@@ -336,6 +378,13 @@ logging.info(f'Model trained')
 
 # log
 logging.info(f'Program completed')
+
+# log model in provenance graph
+model_name = str(model_cls.split('.')[-1])
+prov4ml.log_model(model, model_name)
+
+# terminate prov4ml
+prov4ml.end_run(create_graph=True, create_svg=False)
 
 # close program
 exit(1)

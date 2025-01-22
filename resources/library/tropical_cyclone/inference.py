@@ -204,7 +204,6 @@ class Inference():
 
 
 
-
 class SingleModelInference(Inference):
     def __init__(self, model_dir, device='cpu') -> None:
         super().__init__(device)
@@ -232,6 +231,7 @@ class SingleModelInference(Inference):
         # get detections
         detections = get_detections(patch_ds)
         return detections
+
 
 
 class EnsembleModelInference(Inference):

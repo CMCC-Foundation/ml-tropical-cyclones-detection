@@ -1,4 +1,5 @@
 from mpi4py import MPI
+import pandas as pd
 import logging
 import os
 import sys
@@ -7,7 +8,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 sys.path.append('../resources/library')
-from tropical_cyclone.macros import TEST_YEARS as test_years
+from info import test_years
 from tropical_cyclone.inference import SingleModelInference
 
 
@@ -22,16 +23,23 @@ size = comm.Get_size()
 #  Program Parameters
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
+# main directories
+experiment_dir = '/work/cmcc/machine_learning/dd26322/tropical_cyclone_tracking/experiments'
+data_dir = '/work/cmcc/machine_learning/dd26322/tropical_cyclone_tracking/data'
+
+experiment = sys.argv[1]
+eps = float(sys.argv[2])
+
 # select model
-run_dir = f'../backup/{sys.argv[1]}'
-dataset_dir = '../data/dataset'
+model_dir = os.path.join(experiment_dir, f'{experiment}')
+dataset_dir = os.path.join(data_dir, 'datasets/north_pacific')
 
 # define inference folder
-inference_dir = '../data/inference'
-inference_model_dir = os.path.join(inference_dir, os.path.basename(run_dir))
+inference_dir = os.path.join(data_dir, 'inference')
+inference_model_dir = os.path.join(inference_dir, os.path.basename(model_dir))
 
 # define logs directory
-log_dir = f'../logs/inference_{sys.argv[1]}'
+log_dir = f'logs_{experiment}'
 
 # create directory if not exist
 if not rank:
@@ -54,8 +62,9 @@ logging.basicConfig(format="[%(asctime)s] %(levelname)s : %(message)s", filename
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
 logging.info(f'Starting inference')
+logging.info(f'   selected model at {model_dir}')
 
-inference = SingleModelInference(model_dir=run_dir, device='mps')
+inference = SingleModelInference(model_dir=model_dir, device='cuda')
 drivers = inference.drivers
 
 logging.info(f'Evaluating test set years')
@@ -68,7 +77,9 @@ for i in range(rank, len(test_years), size):
     logging.info(f'  Predicting...')
     # predict with the model
     ds, dates = inference.load_dataset(dataset_dir=dataset_dir, drivers=drivers, year=year, is_cmip6=False)
-    detections = inference.predict(ds, patch_size=40)
+    detections = inference.predict(ds, patch_size=40, eps=eps, roll=False)
+    # rdetections = inference.predict(ds, patch_size=40, eps=eps, roll=True) # rolled detections
+    # detections = pd.concat((detections, rdetections))
     logging.info(f'   ...done')
     # store detections on disk
     inference.store_detections(detections, detection_dst)
