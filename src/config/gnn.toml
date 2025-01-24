@@ -1,13 +1,14 @@
 [run]
-seed = 12368
+seed = 42
+use_case = 'gnn'
 
 [dir]
 experiment = '../experiments'
 run = '../experiments/graphunet'
-scaler = '../data/scalers/standard.dump'
 train = '../data/patches/train'
 valid = '../data/patches/valid'
 test = '../data/patches/test'
+scaler = '../data/patches/scaler_1980_2009.nc'
 
 [torch]
 matmul_precision = "medium"
@@ -22,7 +23,7 @@ drivers = ['fg10', 'i10fg', 'msl', 't_500', 't_300', 'vo_850']
 targets = ['density_map_tc']
 
 [model]
-cls = 'tc.models.GraphUNet'
+cls = 'GraphUNet'
 metrics = []
     [model.args]
     in_channels = 6
@@ -53,7 +54,7 @@ cls = 'torch.optim.Adam'
     total_iters = 5 # warmup epochs
 
 [train]
-epochs = 10
+epochs = 1
 batch_size = 512
 augmentation = true
 drop_remainder = true
