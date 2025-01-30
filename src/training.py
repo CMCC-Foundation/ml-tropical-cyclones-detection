@@ -380,7 +380,7 @@ logging.info(f'Model trained')
 logging.info(f'Program completed')
 
 # log model in provenance graph
-model_name = str(model_cls.split('.')[-1])
+model_name = config.model.cls
 prov4ml.log_model(model, model_name)
 
 # terminate prov4ml
