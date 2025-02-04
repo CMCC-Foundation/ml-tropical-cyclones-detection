@@ -19,7 +19,6 @@ import toml
 import os
 
 
-
 def load_ibtracs(ibtracs_src, lat_range=None, lon_range=None):
     if ibtracs_src is None:
         return None
@@ -90,7 +89,7 @@ def load_trained_model(model_dir, device='cpu'):
     # load state dict
     model_state_dict = torch.load(f=model_weights_file, map_location=device)
     # load weights into model
-    model.load_state_dict(model_state_dict['model'])
+    model.load_state_dict(model_state_dict['state_dict'])
     # put the model to device
     model.to(device)
     return model, config, model_weights_file
@@ -106,15 +105,17 @@ def prepare_dataloader(patch_ds, patch_size, scaler, drivers, time, rows, cols, 
     x = np.reshape(x, newshape=(time*rows*cols, patch_size, patch_size, channels))
     # transform the data with the scaler
     x = scaler.transform(torch.as_tensor(x))
+    # remove all nan values (if present)
+    x = np.nan_to_num(x, nan=0.0)
     # move drivers to second dimension
-    x = np.transpose(x, axes=(0,3,1,2))
+    x = (np.transpose(x, axes=(0,3,1,2)))
     # convert to dataset
-    dataset = TensorDataset(x)
+    dataset = TensorDataset(torch.as_tensor(x, dtype=torch.float32))
     # create a dataloader
     data_loader = DataLoader(dataset=dataset, batch_size=batch_size)
     return data_loader
 
-def predict_with_models(models, data_loader, device='cpu'):
+def predict_with_models(models, data_loader, device = 'cpu'):
     if type(models) != list: models = [models]
     models_predictions = []
     for model in models:
@@ -151,15 +152,6 @@ def get_detections(patch_ds):
     detections = detections.reset_index(drop=True)
     return detections
 
-def get_detected_tracks(detections, max_distance=400.0, min_track_count=12, min_wind_speed=None):
-    # initialize tracking dataframe
-    detected_tracks = init_track_dataframe(detections)
-    # apply tracking scheme to detections
-    detected_tracks = tracking_algorithm(tracks=detected_tracks, max_distance=max_distance, min_track_count=min_track_count, min_wind_speed=min_wind_speed)
-    return detected_tracks
-
-
-
 
 class Inference():
     def __init__(self, device='cpu') -> None:
@@ -194,13 +186,16 @@ class Inference():
             if year is not None: pattern = f'{year}*.nc'
             else: pattern = f'*.nc'
             files = sorted(glob.glob(os.path.join(dataset_dir, pattern)))
+            logging.info(f'Opening dataset containing {len(files)} files')
             if len(files) == 0: return None
             ds = xr.open_mfdataset(files)
+            logging.info(f'Dataset opened')
         if ds is None:
             logging.info(f'No dataset found')
             return None
         dates = pd.to_datetime(ds['time'].astype(str))
         return ds, dates
+
 
 
 
@@ -211,7 +206,10 @@ class SingleModelInference(Inference):
         self.model, self.config, _ = load_trained_model(model_dir, device)
         self.scaler, self.drivers, self.targets = self._parse_config_file(self.config)
 
-    def predict(self, ds, patch_size=40):
+    def predict(self, ds: xr.Dataset,         # xarray dataset containing input data
+                      patch_size: int = 40,   # dimension of a patch
+                      eps: float = 0.1,       # tolerance value for negative label
+    ):
         lons = ds['lon'].shape[0]
         lats = ds['lat'].shape[0]
         rows = lats // patch_size
@@ -220,18 +218,16 @@ class SingleModelInference(Inference):
         # divide dataset in patches
         patch_ds = ds.coarsen({'lat':patch_size, 'lon':patch_size}, boundary="trim").construct({'lon':("cols", "lon_range"), 'lat':("rows", "lat_range")})
         # get dataloader
-        data_loader = prepare_dataloader(patch_ds=patch_ds, patch_size=patch_size, scaler=self.scaler, 
-                                         drivers=self.drivers, time=time, rows=rows, cols=cols, channels=channels, batch_size=4096)
+        data_loader = prepare_dataloader(patch_ds=patch_ds, patch_size=patch_size, scaler=self.scaler, drivers=self.drivers, 
+                                         time=time, rows=rows, cols=cols, channels=channels, batch_size=4096)
         # predict
         y_pred = predict_with_models(models=[self.model], data_loader=data_loader, device=self.device)
-        # reshape disgregating time, rows and cols
         y_pred = np.reshape(y_pred, newshape=(time, rows, cols, 2))
         # get predicted cyclone coordinates
-        patch_ds = retrieve_predicted_tc(y_pred, ds, patch_ds, patch_size)
+        patch_ds = retrieve_predicted_tc(y_pred, ds, patch_ds, patch_size, eps=eps)
         # get detections
         detections = get_detections(patch_ds)
         return detections
-
 
 
 class EnsembleModelInference(Inference):
@@ -244,12 +240,12 @@ class EnsembleModelInference(Inference):
         self._load_models(models_dir, device)
 
     def _load_models(self, src, device):
-        self.models, self.configs = [], [], []
+        self.models, self.configs = [], []
         logging.info(f'Loading models')
         model_dirs = sorted(glob.glob(os.path.join(src, '*')))
         logging.info(f'   found {len(model_dirs)} models')
-        self.model, self.config, _ = load_trained_model(model_dir, device)
-        self.scaler, self.drivers, self.targets = self._parse_config_file(self.config)
+        # self.model, self.config, _ = load_trained_model(model_dir, device)
+        # self.scaler, self.drivers, self.targets = self._parse_config_file(self.config)
         for i,model_dir in enumerate(model_dirs):
             model, config, _ = load_trained_model(model_dir, device)
             scaler, drivers, _ = self._parse_config_file(config)
@@ -306,5 +302,5 @@ class EnsembleModelInference(Inference):
         # initialize tracking dataframe
         detected_tracks = init_track_dataframe(detections)
         # apply tracking scheme to detections
-        detected_tracks = tracking_algorithm(tracks=detected_tracks, max_distance=max_distance, min_track_count=min_track_count, min_wind_speed=min_wind_speed)
+        detected_tracks = tracking_algorithm(track_df=detected_tracks, max_distance=max_distance, min_track_count=min_track_count, min_wind_speed=min_wind_speed)
         return detected_tracks

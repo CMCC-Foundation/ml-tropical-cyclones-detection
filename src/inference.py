@@ -24,8 +24,8 @@ size = comm.Get_size()
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
 # main directories
-experiment_dir = '/work/cmcc/machine_learning/dd26322/tropical_cyclone_tracking/experiments'
-data_dir = '/work/cmcc/machine_learning/dd26322/tropical_cyclone_tracking/data'
+experiment_dir = 'PATH_TO/experiments'
+data_dir = 'PATH_TO/data'
 
 experiment = sys.argv[1]
 eps = float(sys.argv[2])
@@ -77,9 +77,7 @@ for i in range(rank, len(test_years), size):
     logging.info(f'  Predicting...')
     # predict with the model
     ds, dates = inference.load_dataset(dataset_dir=dataset_dir, drivers=drivers, year=year, is_cmip6=False)
-    detections = inference.predict(ds, patch_size=40, eps=eps, roll=False)
-    # rdetections = inference.predict(ds, patch_size=40, eps=eps, roll=True) # rolled detections
-    # detections = pd.concat((detections, rdetections))
+    detections = inference.predict(ds, patch_size=40, eps=eps)
     logging.info(f'   ...done')
     # store detections on disk
     inference.store_detections(detections, detection_dst)

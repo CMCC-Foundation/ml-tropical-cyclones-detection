@@ -1,3 +1,7 @@
+from layers import PatchEmbed, BasicLayer, Downsample, Mlp
+
+from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import apply_activation_checkpointing
+from timm.layers import to_2tuple, trunc_normal_
 import lightning.pytorch as pl
 import lightning as L
 from typing import Any
@@ -14,6 +18,8 @@ try:
     import prov4ml
 except ImportError:
     print('Library prov4ml not found, keep executing...')
+
+
 
 class BaseLightningModule(L.LightningModule):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -244,7 +250,119 @@ class VGG_V3(BaseLightningModule):
                     nn.init.normal_(module.weight, mean=0, std=std)
                     nn.init.normal_(module.bias, mean=0, std=std)
 
-        
+
+
+class SwinTropicalCyclone(BaseLightningModule):
+    def __init__(self, in_channels, 
+                       out_channels, 
+                       img_size=40, 
+                       patch_size=1, 
+                       win_size=4, 
+                       embed_dim=96, 
+                       depths=[2,4], 
+                       num_heads=[4,8], 
+                       pretrained_window_sizes=(0,0), 
+                       use_checkpoint=True, 
+                       dim_factor=1, 
+                       mlp_ratio=4, 
+                       qkv_bias=True, 
+                       drop_rate=0., 
+                       attn_drop_rate=0., 
+                       drop_path_rate=0.2, 
+                       swin_block_version=2, 
+                       norm_layer=nn.LayerNorm, 
+                       embed_patch_norm=True, 
+                       ape=True) -> None:
+        super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.num_layers = len(depths)
+        self.ape = ape
+        patch_size = to_2tuple(patch_size)
+        win_size = to_2tuple(win_size)
+
+        # patch embedding
+        self.patch_embed = PatchEmbed(img_size=img_size, in_channels=in_channels, 
+                                      patch_size=patch_size, embed_dim=embed_dim, 
+                                      norm_layer=norm_layer if embed_patch_norm else None, use_bias=True)
+        num_patches = self.patch_embed.num_patches
+        patches_resolution = self.patch_embed.patches_resolution
+        self.patches_resolution = patches_resolution
+
+        # absolute position embedding
+        if self.ape:
+            self.absolute_pos_embed = nn.Parameter(torch.zeros(1, num_patches, embed_dim))
+            trunc_normal_(self.absolute_pos_embed, std=.02)
+
+        # positional dropout
+        self.pos_drop = nn.Dropout(p=drop_rate)
+    
+        # stochastic depth
+        dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(depths))]  # stochastic depth decay rule
+
+        # create resolutions list
+        input_resolutions = [(-(patches_resolution[0] // -(2 ** i)), -(patches_resolution[1] // -(2 ** i))) for i in range(self.num_layers)]
+
+        # build model encoder layers
+        self.transformer = nn.ModuleList()
+        for i_layer in range(self.num_layers):
+            layer = BasicLayer(dim=int(embed_dim * dim_factor ** i_layer), dim_factor=dim_factor, input_resolution=input_resolutions[i_layer], 
+                               depth=depths[i_layer], num_heads=num_heads[i_layer], win_size=win_size, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias,
+                               drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[sum(depths[:i_layer]):sum(depths[:i_layer + 1])], 
+                               operation=Downsample, norm_layer=norm_layer,
+                               pretrained_window_size=pretrained_window_sizes[i_layer], sealand_attn_mask=None, 
+                               use_checkpoint=use_checkpoint, version=swin_block_version)
+            self.transformer.append(layer)
+
+        dim = int(embed_dim * dim_factor ** self.num_layers)
+        self.norm = norm_layer(dim) if norm_layer is not None else nn.Identity()
+        self.flatten = nn.Flatten()
+        self.head = Mlp(in_features=dim, hidden_features=128, out_features=out_channels)
+
+        # apply weight initialization
+        self.apply(self._init_weights)
+        for bly in self.transformer: bly._init_respostnorm()
+
+    def _init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            trunc_normal_(m.weight, std=0.02)
+            if isinstance(m, nn.Linear) and m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.LayerNorm):
+            nn.init.constant_(m.bias, 0)
+            nn.init.constant_(m.weight, 1.0)
+
+    @torch.jit.ignore
+    def no_weight_decay(self):
+        return {'absolute_pos_embed'}
+
+    @torch.jit.ignore
+    def no_weight_decay_keywords(self):
+        return {"cpb_mlp", "logit_scale", 'relative_position_bias_table'}
+
+    def forward_features(self, x: torch.Tensor):
+        x = self.patch_embed(x)
+        if self.ape: x = x + self.absolute_pos_embed
+        x = self.pos_drop(x)
+        for layer in self.transformer:
+            x = layer(x)
+        x = self.norm(x)
+        x = self.flatten(x)
+        x = self.head(x)
+        return x
+
+    def forward(self, x: torch.Tensor):
+        x = self.forward_features(x)
+        return x
+
+    def configure_activation_checkpointing(self):
+        """Configure activation checkpointing.
+
+        This is required in order to compute gradients without running out of memory.
+        """
+        apply_activation_checkpointing(self, check_fn=lambda x: (isinstance(x, (BasicLayer, PatchEmbed))))
+
+
 
 class BaseLightningModuleGNN(pl.LightningModule):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
