@@ -1,4 +1,4 @@
-from layers import PatchEmbed, BasicLayer, Downsample, Mlp
+from tropical_cyclone.layers import PatchEmbed, BasicLayer, Downsample, Mlp
 
 from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import apply_activation_checkpointing
 from timm.layers import to_2tuple, trunc_normal_

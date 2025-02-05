@@ -24,8 +24,8 @@ size = comm.Get_size()
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
 # main directories
-experiment_dir = 'PATH_TO/experiments'
-data_dir = 'PATH_TO/data'
+experiment_dir = "../experiments"
+data_dir = "../data"
 
 experiment = sys.argv[1]
 eps = float(sys.argv[2])

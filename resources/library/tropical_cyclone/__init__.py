@@ -20,6 +20,7 @@ from . import dataset
 from . import era5
 from . import georeferencing as georef
 from . import inference
+from . import layers
 from . import macros
 from . import models
 from . import patch_proc as patchproc
