@@ -112,10 +112,12 @@ def get_tropical_cyclone_positions(ds:xr.Dataset, georef:pd.DataFrame, sigma:int
 
 
 
-def retrieve_predicted_tc(y_pred, ds, patch_ds, patch_size):
+def retrieve_predicted_tc(y_pred, ds, patch_ds, patch_size, eps: float = 0.1):
     """
     Retrieves the latitude-longitude coordinates from the passed predicted TCs
-    
+
+    eps: float = 0.1 - small value > 0
+
     """
     # create a latlons matrix with the same shape of y_pred_reshaped filled with nan
     cyclone_latlon_coords = np.full_like(y_pred, fill_value=np.nan)
@@ -126,6 +128,18 @@ def retrieve_predicted_tc(y_pred, ds, patch_ds, patch_size):
         for i in range(y_pred.shape[1]):
             # for each column
             for j in range(y_pred.shape[2]):
+                # correct the prediction if `eps` <= x <= 0.0 (slightly negative, could be an oscillation)
+                if y_pred[t,i,j,0] < 0.0:
+                    if y_pred[t,i,j,0] >= -eps:
+                        y_pred[t,i,j,0] = 0.0
+                if y_pred[t,i,j,1] < 0.0:
+                    if y_pred[t,i,j,1] >= -eps:
+                        y_pred[t,i,j,1] = 0.0
+                # correct the prediction if x > 39.0 (too high, could be an oscillation)
+                if y_pred[t,i,j,0] >= patch_size - 1:
+                    y_pred[t,i,j,0] = patch_size - 1
+                if y_pred[t,i,j,1] >= patch_size - 1:
+                    y_pred[t,i,j,1] = patch_size - 1
                 # if the model prediction is valid
                 if y_pred[t,i,j,0] >= 0.0 and y_pred[t,i,j,1] >= 0.0:
                     try:
