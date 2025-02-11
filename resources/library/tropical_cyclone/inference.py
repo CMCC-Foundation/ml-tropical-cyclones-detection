@@ -174,7 +174,7 @@ class Inference():
     def _parse_config_file(self, config):
         drivers = config.data.drivers
         targets = config.data.targets
-        scaler = StandardScaler(mean_src=config.dir.scaler.mean, std_src=config.dir.scaler.std, drivers=drivers)
+        scaler = StandardScaler(src=config.dir.scaler, drivers=drivers)
         return scaler, drivers, targets
 
     def load_dataset(self, dataset_dir, drivers, year=None, is_cmip6=False):
