@@ -159,7 +159,7 @@ class TCGraphDataset(Dataset_PyG):
                  src: str,
                  drivers: List[str],
                  targets: List[str],
-                 scaler = None,
+                 scaler: Scaler = None,
                  augmentation: bool = False,
                  dtype = torch.float32):
         self.src = src
@@ -373,12 +373,15 @@ class TCGraphDatasetInference(TCGraphDataset):
                  year: str,
                  drivers: List[str],
                  targets: List[str],
-                 scaler = None):
+                 scaler: Scaler = None,
+                 eps: float = 0.1):
         
             # inference object for loading and storing data
             self.inference_obj = Inference()
             self.ds, _ = self.inference_obj.load_dataset(dataset_dir=src, drivers=drivers, year=year)
+            
             self.year = year
+            self.eps = eps
             
             # sets up the parent __init__() and launches the child class process()
             super().__init__(src='Inference', drivers=drivers, targets=targets, scaler=scaler)
@@ -449,7 +452,7 @@ class TCGraphDatasetInference(TCGraphDataset):
         tot_pred = np.reshape(tot_pred, newshape=(self.time, self.rows, self.cols, 2))
         
         # retrieves the latitude-longitude coordinates from the predicted TCs
-        patch_ds = retrieve_predicted_tc(tot_pred, self.ds, self.patch_ds, self.patch_size)
+        patch_ds = retrieve_predicted_tc(tot_pred, self.ds, self.patch_ds, self.patch_size, self.eps)
         
         # gets the dataframe with ISO_TIME, LAT, LON, and WS
         self.detections = get_detections(patch_ds)

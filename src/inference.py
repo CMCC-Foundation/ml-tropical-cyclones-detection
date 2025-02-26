@@ -118,7 +118,7 @@ elif config.run.use_case == 'gnn':
         detection_dst = os.path.join(inference_model_dir, f'{year}.csv')
         # creating graph dataset and dataloader for the current year
         logging.info(f'  Graph dataset preparation...')
-        dataset = tc.dataset.TCGraphDatasetInference(src=dataset_dir, year=year, drivers=config.data.drivers, targets=config.data.targets, scaler=scaler)
+        dataset = tc.dataset.TCGraphDatasetInference(src=dataset_dir, year=year, drivers=config.data.drivers, targets=config.data.targets, scaler=scaler, eps=eps)
         loader = GraphDataLoader(dataset, batch_size=config.train.batch_size, shuffle=False, drop_last=False)
         # getting a graph tester to obtain the y predictions with shape [B, 2]
         logging.info(f'  Predicting...')
