@@ -196,6 +196,12 @@ class Inference():
         dates = pd.to_datetime(ds['time'].astype(str))
         return ds, dates
 
+    def tracking(self, detections, max_distance=400.0, min_track_count=12, min_wind_speed=None):
+        # initialize tracking dataframe
+        detected_tracks = init_track_dataframe(detections)
+        # apply tracking scheme to detections
+        detected_tracks = tracking_algorithm(track_df=detected_tracks, max_distance=max_distance, min_track_count=min_track_count, min_wind_speed=min_wind_speed)
+        return detected_tracks
 
 
 
@@ -297,10 +303,3 @@ class EnsembleModelInference(Inference):
         # get detections
         detections = get_detections(patch_ds)
         return detections
-
-    def tracking(self, detections, max_distance=400.0, min_track_count=12, min_wind_speed=None):
-        # initialize tracking dataframe
-        detected_tracks = init_track_dataframe(detections)
-        # apply tracking scheme to detections
-        detected_tracks = tracking_algorithm(track_df=detected_tracks, max_distance=max_distance, min_track_count=min_track_count, min_wind_speed=min_wind_speed)
-        return detected_tracks
