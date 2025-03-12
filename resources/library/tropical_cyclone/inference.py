@@ -267,7 +267,7 @@ class Inference:
         return ds, dates
 
     def tracking(
-        self, detections, max_distance=400.0, min_track_count=12, min_wind_speed=None
+        self, detections, max_distance=400.0, min_track_count=12
     ):
         # initialize tracking dataframe
         detected_tracks = init_track_dataframe(detections)
