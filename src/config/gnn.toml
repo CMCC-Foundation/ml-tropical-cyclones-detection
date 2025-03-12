@@ -56,6 +56,5 @@ cls = 'torch.optim.Adam'
 [train]
 epochs = 1
 batch_size = 512
-augmentation = true
 drop_remainder = true
 accumulation_steps = 1

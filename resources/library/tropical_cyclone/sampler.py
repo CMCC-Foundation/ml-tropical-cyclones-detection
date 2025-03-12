@@ -5,9 +5,10 @@ import torch
 import math
 
 
-
 class DistributedWeightedSampler(Sampler):
-    def __init__(self, dataset, num_replicas=None, rank=None, replacement=True, shuffle=False):
+    def __init__(
+        self, dataset, num_replicas=None, rank=None, replacement=True, shuffle=False
+    ):
         if num_replicas is None:
             if not dist.is_available():
                 raise RuntimeError("Requires distributed package to be available")
@@ -21,8 +22,10 @@ class DistributedWeightedSampler(Sampler):
         self.rank = rank
         self.epoch = 0
         self.total_num_samples = dataset.total_num_samples
-        self.weights = [i/sum(self.total_num_samples) for i in self.total_num_samples]
-        self.num_samples = [int(math.ceil(i * 1.0 / self.num_replicas)) for i in self.total_num_samples]
+        self.weights = [i / sum(self.total_num_samples) for i in self.total_num_samples]
+        self.num_samples = [
+            int(math.ceil(i * 1.0 / self.num_replicas)) for i in self.total_num_samples
+        ]
         self.total_size = [i * self.num_replicas for i in self.num_samples]
         self.replacement = replacement
         self.shuffle = shuffle
@@ -38,12 +41,16 @@ class DistributedWeightedSampler(Sampler):
                 indices.append(torch.randperm(num_samples, generator=g).tolist())
             else:
                 indices.append(list(range(num_samples)))
-            indices[i] += indices[i][:(self.total_size[i] - len(indices[i]))]
+            indices[i] += indices[i][: (self.total_size[i] - len(indices[i]))]
             assert len(indices[i]) == self.total_size[i]
-            indices[i] = indices[i][self.rank:self.total_size[i]:self.num_replicas]
+            indices[i] = indices[i][self.rank : self.total_size[i] : self.num_replicas]
             assert len(indices[i]) == self.num_samples[i]
         # create the weighted random sampler
-        sampler = list(WeightedRandomSampler(weights=self.weights, num_samples=sum(self.num_samples)))
+        sampler = list(
+            WeightedRandomSampler(
+                weights=self.weights, num_samples=sum(self.num_samples)
+            )
+        )
         # create indices array
         data_indices = []
         ijk = [0] * len(indices)

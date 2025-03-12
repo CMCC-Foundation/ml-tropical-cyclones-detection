@@ -14,14 +14,13 @@ import os
 from tropical_cyclone.utils import seed_everything
 
 
-
 class FabricTrainer:
     def __init__(
         self,
         accelerator: Union[str, Accelerator] = "auto",
         strategy: Union[str, Strategy] = "auto",
         devices: Union[List[int], str, int] = "auto",
-        num_nodes: int = 1, 
+        num_nodes: int = 1,
         precision: Union[str, int] = "32-true",
         plugins: Optional[Union[str, Any]] = None,
         callbacks: Optional[Union[List[Any], Any]] = None,
@@ -33,9 +32,9 @@ class FabricTrainer:
         limit_val_batches: Union[int, float] = float("inf"),
         validation_frequency: int = 1,
         use_distributed_sampler: bool = True,
-        checkpoint_dir: str = None, 
-        checkpoint_frequency: int = 1, 
-        seed: int = 42, 
+        checkpoint_dir: str = None,
+        checkpoint_frequency: int = 1,
+        seed: int = 42,
     ) -> None:
         """Exemplary Trainer with Fabric. This is a very simple trainer focused on readablity but with reduced
         featureset. As a trainer with more included features, we recommend using the
@@ -113,7 +112,7 @@ class FabricTrainer:
         self.seed = seed
 
         # seed the run (add the global rank to differentiate the parallel executions)
-        seed_everything(seed=self.seed+self.global_rank)
+        seed_everything(seed=self.seed + self.global_rank)
 
         self.global_step = 0
         self.grad_accum_steps: int = grad_accum_steps
@@ -141,65 +140,67 @@ class FabricTrainer:
         self.checkpoint_frequency = checkpoint_frequency
 
     def setup(
-        self, 
-        model: L.LightningModule, 
-        optimizer_cls, 
-        optimizer_args, 
-        scheduler_cls = None, 
-        scheduler_args = None, 
-        checkpoint: str = None, 
+        self,
+        model: L.LightningModule,
+        optimizer_cls,
+        optimizer_args,
+        scheduler_cls=None,
+        scheduler_args=None,
+        checkpoint: str = None,
     ):
-        """The fabric model and optimizer setup for the training.
-        """
+        """The fabric model and optimizer setup for the training."""
         # log
-        logging.info(f'Fabric Trainer Setup')
+        logging.info(f"Fabric Trainer Setup")
 
         # load previous model if provided
         if checkpoint:
             state_dict = self.fabric.load(checkpoint)
-            model.load_state_dict(state_dict['model'])
+            model.load_state_dict(state_dict["model"])
             # log
-            logging.info(f'Model checkpoint provided. Restored weights from checkpoint at {checkpoint}')
+            logging.info(
+                f"Model checkpoint provided. Restored weights from checkpoint at {checkpoint}"
+            )
 
         # print model summary
-        if self.fabric.global_rank == 0: print(ModelSummary(model=model, max_depth=2))
+        if self.fabric.global_rank == 0:
+            print(ModelSummary(model=model, max_depth=2))
 
         # setup the model in sync
         self.model = self.fabric.setup_module(model)
 
         # log
-        logging.info(f'Model distributed in sync')
+        logging.info(f"Model distributed in sync")
 
         # init the optimizer
         self.optimizer = optimizer_cls(self.model.parameters(), **optimizer_args)
 
         # log
-        logging.info(f'Optimizer initialized {optimizer_cls}')
+        logging.info(f"Optimizer initialized {optimizer_cls}")
 
         # init the scheduler if provided
         if scheduler_cls and scheduler_args:
             self.scheduler_cfg = {
-                'scheduler': scheduler_cls(optimizer = self.optimizer, **scheduler_args), 
-                'monitor': 'val_loss',
-                'interval': 'epoch',
-                'frequency': 1,
-                }
+                "scheduler": scheduler_cls(optimizer=self.optimizer, **scheduler_args),
+                "monitor": "val_loss",
+                "interval": "epoch",
+                "frequency": 1,
+            }
             # log
-            logging.info(f'Scheduler initialized {scheduler_cls}')
+            logging.info(f"Scheduler initialized {scheduler_cls}")
         else:
             self.scheduler_cfg = None
 
         # load previous optimizer if provided
-        if checkpoint and 'optimizer' in state_dict.keys():
-            self.optimizer.load_state_dict(state_dict['optimizer'])
+        if checkpoint and "optimizer" in state_dict.keys():
+            self.optimizer.load_state_dict(state_dict["optimizer"])
             # log
-            logging.info(f'Restored optimizer from checkpoint at {checkpoint}')
+            logging.info(f"Restored optimizer from checkpoint at {checkpoint}")
 
         # setup optimizer among replicas in sync
         self.optimizer = self.fabric.setup_optimizers(self.optimizer)
 
         # log
-        logging.info(f'Optimizer distributed in sync')
+        logging.info(f"Optimizer distributed in sync")
 
     def fit(
         self,
@@ -221,31 +222,48 @@ class FabricTrainer:
         """
 
         # setup dataloaders
-        train_loader = self.fabric.setup_dataloaders(train_loader, use_distributed_sampler=self.use_distributed_sampler)
+        train_loader = self.fabric.setup_dataloaders(
+            train_loader, use_distributed_sampler=self.use_distributed_sampler
+        )
         if val_loader is not None:
-            val_loader = self.fabric.setup_dataloaders(val_loader, use_distributed_sampler=self.use_distributed_sampler)
+            val_loader = self.fabric.setup_dataloaders(
+                val_loader, use_distributed_sampler=self.use_distributed_sampler
+            )
 
         # log
-        logging.info(f'Dataloaders distributed in sync')
+        logging.info(f"Dataloaders distributed in sync")
 
         self.call("on_fit_start", trainer=self, pl_module=self.model)
 
         # log
-        logging.info(f'Training started')
+        logging.info(f"Training started")
 
         while not self.should_stop:
             # log
-            logging.info(f'Epoch [{self.current_epoch+1}/{self.max_epochs}]')
+            logging.info(f"Epoch [{self.current_epoch+1}/{self.max_epochs}]")
 
             # execute training loop
-            self.train_loop(self.model, self.optimizer, train_loader, limit_batches=self.limit_train_batches, scheduler_cfg=self.scheduler_cfg)
+            self.train_loop(
+                self.model,
+                self.optimizer,
+                train_loader,
+                limit_batches=self.limit_train_batches,
+                scheduler_cfg=self.scheduler_cfg,
+            )
 
             # execute validation loop
             if self.should_validate:
-                self.val_loop(self.model, val_loader, limit_batches=self.limit_val_batches)
+                self.val_loop(
+                    self.model, val_loader, limit_batches=self.limit_val_batches
+                )
 
             # step with the LR scheduler
-            self.step_scheduler(self.model, self.scheduler_cfg, level="epoch", current_value=self.current_epoch)
+            self.step_scheduler(
+                self.model,
+                self.scheduler_cfg,
+                level="epoch",
+                current_value=self.current_epoch,
+            )
 
             # add 1 to the current epoch
             self.current_epoch += 1
@@ -255,7 +273,11 @@ class FabricTrainer:
                 self.should_stop = True
 
             # assemble state (current epoch and global step will be added in save)
-            state = {"model": self.model, "optimizer": self.optimizer, 'scheduler': self.scheduler_cfg}
+            state = {
+                "model": self.model,
+                "optimizer": self.optimizer,
+                "scheduler": self.scheduler_cfg,
+            }
 
             # save model state
             self.save(state)
@@ -269,7 +291,9 @@ class FabricTrainer:
         optimizer: torch.optim.Optimizer,
         train_loader: torch.utils.data.DataLoader,
         limit_batches: Union[int, float] = float("inf"),
-        scheduler_cfg: Optional[Mapping[str, Union[L.fabric.utilities.types.LRScheduler, bool, str, int]]] = None,
+        scheduler_cfg: Optional[
+            Mapping[str, Union[L.fabric.utilities.types.LRScheduler, bool, str, int]]
+        ] = None,
     ):
         """The training loop running a single training epoch.
 
@@ -287,29 +311,55 @@ class FabricTrainer:
         self.call("on_train_epoch_start", trainer=self, pl_module=self.model)
 
         # print the epoch number
-        if self.fabric.global_rank == 0: print(f'Epoch [{self.current_epoch+1}/{self.max_epochs}]')
+        if self.fabric.global_rank == 0:
+            print(f"Epoch [{self.current_epoch+1}/{self.max_epochs}]")
 
         # set the tqdm progress bar
-        iterable = self.progbar_wrapper(train_loader, total=min(len(train_loader), limit_batches), desc=f"Train")
+        iterable = self.progbar_wrapper(
+            train_loader, total=min(len(train_loader), limit_batches), desc=f"Train"
+        )
 
         for batch_idx, batch in enumerate(iterable):
             # end epoch if stopping training completely or max batches for this epoch reached
             if self.should_stop or batch_idx >= limit_batches:
                 break
 
-            self.call("on_train_batch_start", trainer=self, pl_module=self.model, batch=batch, batch_idx=batch_idx)
+            self.call(
+                "on_train_batch_start",
+                trainer=self,
+                pl_module=self.model,
+                batch=batch,
+                batch_idx=batch_idx,
+            )
 
             # check if optimizer should step in gradient accumulation
             should_optim_step = batch_idx % self.grad_accum_steps == 0
 
             if should_optim_step:
                 # currently only supports a single optimizer
-                self.call("on_before_optimizer_step", trainer=self, pl_module=self.model, optimizer=optimizer)
+                self.call(
+                    "on_before_optimizer_step",
+                    trainer=self,
+                    pl_module=self.model,
+                    optimizer=optimizer,
+                )
 
                 # optimizer step runs train step internally through closure
-                optimizer.step(partial(self.training_step, model=model, batch=batch, batch_idx=batch_idx))
+                optimizer.step(
+                    partial(
+                        self.training_step,
+                        model=model,
+                        batch=batch,
+                        batch_idx=batch_idx,
+                    )
+                )
 
-                self.call("on_before_zero_grad", trainer=self, pl_module=self.model, optimizer=optimizer)
+                self.call(
+                    "on_before_zero_grad",
+                    trainer=self,
+                    pl_module=self.model,
+                    optimizer=optimizer,
+                )
 
                 # zero grad the optimizer
                 optimizer.zero_grad()
@@ -317,11 +367,20 @@ class FabricTrainer:
                 # gradient accumulation -> no optimizer step
                 self.training_step(model=model, batch=batch, batch_idx=batch_idx)
 
-            self.call("on_train_batch_end", trainer=self, pl_module=self.model, outputs=self._current_train_return, batch=batch, batch_idx=batch_idx)
+            self.call(
+                "on_train_batch_end",
+                trainer=self,
+                pl_module=self.model,
+                outputs=self._current_train_return,
+                batch=batch,
+                batch_idx=batch_idx,
+            )
 
             # this guard ensures, we only step the scheduler once per global step
             if should_optim_step:
-                self.step_scheduler(model, scheduler_cfg, level="step", current_value=self.global_step)
+                self.step_scheduler(
+                    model, scheduler_cfg, level="step", current_value=self.global_step
+                )
 
             # add output values to progress bar
             self._format_iterable(iterable, self.model.callback_metrics, "", "train")
@@ -363,7 +422,9 @@ class FabricTrainer:
         self.call("on_validation_epoch_start", trainer=self, pl_module=self.model)
 
         # create validation tqdm iterable
-        iterable = self.progbar_wrapper(val_loader, total=min(len(val_loader), limit_batches), desc="Valid")
+        iterable = self.progbar_wrapper(
+            val_loader, total=min(len(val_loader), limit_batches), desc="Valid"
+        )
 
         # iterate over validation batches
         for batch_idx, batch in enumerate(iterable):
@@ -371,7 +432,13 @@ class FabricTrainer:
             if self.should_stop or batch_idx >= limit_batches:
                 break
 
-            self.call("on_validation_batch_start", trainer=self, pl_module=self.model, batch=batch, batch_idx=batch_idx)
+            self.call(
+                "on_validation_batch_start",
+                trainer=self,
+                pl_module=self.model,
+                batch=batch,
+                batch_idx=batch_idx,
+            )
 
             # apply model validation step and return the step outputs
             outputs = model.validation_step(batch, batch_idx)
@@ -379,7 +446,14 @@ class FabricTrainer:
             # avoid gradients in stored/accumulated values -> prevents potential OOM
             outputs = apply_to_collection(outputs, torch.Tensor, lambda x: x.detach())
 
-            self.call("on_validation_batch_end", trainer=self, pl_module=self.model, outputs=outputs, batch=batch, batch_idx=batch_idx)
+            self.call(
+                "on_validation_batch_end",
+                trainer=self,
+                pl_module=self.model,
+                outputs=outputs,
+                batch=batch,
+                batch_idx=batch_idx,
+            )
 
             # store detached outputs
             self._current_val_return = outputs
@@ -395,7 +469,9 @@ class FabricTrainer:
         self.fabric.call("on_validation_model_train")
         torch.set_grad_enabled(True)
 
-    def training_step(self, model: L.LightningModule, batch: Any, batch_idx: int) -> torch.Tensor:
+    def training_step(
+        self, model: L.LightningModule, batch: Any, batch_idx: int
+    ) -> torch.Tensor:
         """A single training step, running forward and backward. The optimizer step is called separately, as this is
         given as a closure to the optimizer step.
 
@@ -406,7 +482,9 @@ class FabricTrainer:
 
         """
         # apply model training step and return the step outputs
-        outputs: Union[torch.Tensor, Mapping[str, Any]] = model.training_step(batch, batch_idx=batch_idx)
+        outputs: Union[torch.Tensor, Mapping[str, Any]] = model.training_step(
+            batch, batch_idx=batch_idx
+        )
 
         # get the loss value from the outputs
         loss = outputs if isinstance(outputs, torch.Tensor) else outputs["loss"]
@@ -419,14 +497,18 @@ class FabricTrainer:
         self.call("on_after_backward", trainer=self, pl_module=self.model)
 
         # avoid gradients in stored/accumulated values -> prevents potential OOM
-        self._current_train_return = apply_to_collection(outputs, dtype=torch.Tensor, function=lambda x: x.detach())
+        self._current_train_return = apply_to_collection(
+            outputs, dtype=torch.Tensor, function=lambda x: x.detach()
+        )
 
         return loss
 
     def step_scheduler(
         self,
         model: L.LightningModule,
-        scheduler_cfg: Optional[Mapping[str, Union[L.fabric.utilities.types.LRScheduler, bool, str, int]]],
+        scheduler_cfg: Optional[
+            Mapping[str, Union[L.fabric.utilities.types.LRScheduler, bool, str, int]]
+        ],
         level: Literal["step", "epoch"],
         current_value: int,
     ) -> None:
@@ -455,17 +537,25 @@ class FabricTrainer:
         # assemble potential monitored values
         possible_monitor_vals = {None: None}
         if isinstance(self._current_train_return, torch.Tensor):
-            possible_monitor_vals.update({"train_loss": self._current_train_return.item()})
+            possible_monitor_vals.update(
+                {"train_loss": self._current_train_return.item()}
+            )
         elif isinstance(self._current_train_return, Mapping):
-            possible_monitor_vals.update({"train_" + k: v for k, v in self._current_train_return.items()})
+            possible_monitor_vals.update(
+                {"train_" + k: v for k, v in self._current_train_return.items()}
+            )
 
         if isinstance(self._current_val_return, torch.Tensor):
             possible_monitor_vals.update({"val_loss": self._current_val_return})
         elif isinstance(self._current_val_return, Mapping):
-            possible_monitor_vals.update({"val_" + k: v for k, v in self._current_val_return.items()})
+            possible_monitor_vals.update(
+                {"val_" + k: v for k, v in self._current_val_return.items()}
+            )
 
         try:
-            monitor = possible_monitor_vals[cast(Optional[str], scheduler_cfg["monitor"])]
+            monitor = possible_monitor_vals[
+                cast(Optional[str], scheduler_cfg["monitor"])
+            ]
         except KeyError as ex:
             possible_keys = list(possible_monitor_vals.keys())
             raise KeyError(
@@ -523,7 +613,12 @@ class FabricTrainer:
         state.update(global_step=self.global_step, current_epoch=self.current_epoch)
 
         if self.checkpoint_dir:
-            self.fabric.save(os.path.join(self.checkpoint_dir, f"epoch-{self.current_epoch:04d}.ckpt"), state)
+            self.fabric.save(
+                os.path.join(
+                    self.checkpoint_dir, f"epoch-{self.current_epoch:04d}.ckpt"
+                ),
+                state,
+            )
 
     @staticmethod
     def get_latest_checkpoint(checkpoint_dir: str) -> Optional[str]:
@@ -547,7 +642,9 @@ class FabricTrainer:
         self, configure_optim_output
     ) -> Tuple[
         Optional[L.fabric.utilities.types.Optimizable],
-        Optional[Mapping[str, Union[L.fabric.utilities.types.LRScheduler, bool, str, int]]],
+        Optional[
+            Mapping[str, Union[L.fabric.utilities.types.LRScheduler, bool, str, int]]
+        ],
     ]:
         """Recursively parses the output of :meth:`lightning.pytorch.LightningModule.configure_optimizers`.
 
@@ -556,7 +653,11 @@ class FabricTrainer:
                 For supported values, please refer to :meth:`lightning.pytorch.LightningModule.configure_optimizers`.
 
         """
-        _lr_sched_defaults = {"interval": "epoch", "frequency": 1, "monitor": "val_loss"}
+        _lr_sched_defaults = {
+            "interval": "epoch",
+            "frequency": 1,
+            "monitor": "val_loss",
+        }
 
         # single optimizer
         if isinstance(configure_optim_output, L.fabric.utilities.types.Optimizable):
@@ -573,7 +674,10 @@ class FabricTrainer:
 
         # list or tuple
         if isinstance(configure_optim_output, (list, tuple)):
-            if all(isinstance(_opt_cand, L.fabric.utilities.types.Optimizable) for _opt_cand in configure_optim_output):
+            if all(
+                isinstance(_opt_cand, L.fabric.utilities.types.Optimizable)
+                for _opt_cand in configure_optim_output
+            ):
                 # single optimizer in list
                 if len(configure_optim_output) == 1:
                     return configure_optim_output[0][0], None
@@ -586,7 +690,10 @@ class FabricTrainer:
             ):
                 # single scheduler in list
                 if len(configure_optim_output) == 1:
-                    return None, self._parse_optimizers_schedulers(configure_optim_output[0])[1]
+                    return (
+                        None,
+                        self._parse_optimizers_schedulers(configure_optim_output[0])[1],
+                    )
 
             # optimizer and lr scheduler
             elif len(configure_optim_output) == 2:
@@ -600,10 +707,12 @@ class FabricTrainer:
 
     @staticmethod
     def _format_iterable(
-        prog_bar, 
-        candidates: Optional[Union[torch.Tensor, Mapping[str, Union[torch.Tensor, float, int]]]], 
-        prefix: str, 
-        status: str = 'train'
+        prog_bar,
+        candidates: Optional[
+            Union[torch.Tensor, Mapping[str, Union[torch.Tensor, float, int]]]
+        ],
+        prefix: str,
+        status: str = "train",
     ):
         """Adds values as postfix string to progressbar.
 
@@ -615,15 +724,17 @@ class FabricTrainer:
         """
         if isinstance(prog_bar, tqdm) and candidates is not None:
             postfix_str = ""
-            float_candidates = apply_to_collection(candidates, torch.Tensor, lambda x: x.item())
+            float_candidates = apply_to_collection(
+                candidates, torch.Tensor, lambda x: x.item()
+            )
             if isinstance(candidates, torch.Tensor):
-                key = f" {prefix}_loss" if prefix!="" else f" loss"
+                key = f" {prefix}_loss" if prefix != "" else f" loss"
                 postfix_str += f"{key}: {float_candidates:.3f}"
             elif isinstance(candidates, Mapping):
                 for k, v in float_candidates.items():
                     if status in k:
                         # k = k.split(f'{status}_')[-1]
-                        pre =  f" {prefix}_{k}" if prefix!="" else f" {k}"
+                        pre = f" {prefix}_{k}" if prefix != "" else f" {k}"
                         postfix_str += f"{pre}: {v:.3f}"
             if postfix_str:
                 prog_bar.set_postfix_str(postfix_str)
@@ -633,7 +744,8 @@ class FabricTrainer:
         try:
             self.fabric.call(hook_name=hook_name, **call_args)
         except Exception as e:
-            del call_args['trainer']; del call_args['pl_module']
+            del call_args["trainer"]
+            del call_args["pl_module"]
             try:
                 self.fabric.call(hook_name=hook_name, **call_args)
             except Exception as k:
