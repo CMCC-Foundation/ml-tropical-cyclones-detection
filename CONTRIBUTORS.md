@@ -3,8 +3,9 @@
 CMCC Developments
 - Davide Donno
 - Gabriele Accarino
-- Francesco Immorlano
 - Donatello Elia
+- Emanuele Donno
+- Francesco Immorlano
 - Giovanni Aloisio
 
 UNITN Developments
