@@ -1,20 +1,13 @@
 # Machine Learning Tropical Cyclones Detection
 
-## Credit
-- Davide Donno
-- Gabriele Accarino
-- Francesco Immorlano
-- Donatello Elia
-- Giovanni Aloisio
-
 ## Overview
 The repository provides a Machine Learning (ML) library to setup training and validation of a Tropical Cyclones (TCs) Detection model. ERA5 reanalysis and the International Best Track Archive for Climate Stewardship (IBTrACS) data are used as input and the target, respectively. Input-Output data pairs are provided as Zarr data stores.
 
 Input drivers:
-- 10m wind gust  [$\frac{m}{s}$]
-- 10m wind gust since previous post-processing [$\frac{m}{s}$]
+- 10m wind gust [ $\frac{m}{s}$]
+- 10m wind gust since previous post-processing [ $\frac{m}{s}$]
 - mean sea level pressure [Pa]
-- relative vorticity at 850 mb [$s^{-1}$]
+- relative vorticity at 850 mb [ $s^{-1}$]
 - temperature at 300 mb [K]
 - temperature at 500 mb [K]
 
@@ -33,7 +26,7 @@ python -u train.py --config config.toml --devices 1 --num_nodes 1
 ```
 The _train.py_ script takes advantage of the Command Line Interface (CLI) to pass additional arguments useful for both training and validation of the model. In particular:
 
-- `--config` specifies the path to the *config.toml* file where the training configuration is stored.
+- `--config` specifies the path to the *config.toml* file where the training configuration is stored. Pre-defined configuration file are located under `src/config/`
 - `--devices` argument defines the number of GPU devices per node to run the training on.
 - `--num_nodes` argument defines the total number of nodes that will be used.
 
@@ -43,6 +36,7 @@ With regards to the configuration file, it must be prepared in toml format. The 
 
 - run : generic arguments
     - seed: the seed of this training (for reproducibility purposes)
+    - use_case: it can be either `cnn` or `gnn` to select the proper type of ML model
 
 - dir : directories
     - experiment: path to store the current experiment
@@ -70,7 +64,7 @@ With regards to the configuration file, it must be prepared in toml format. The 
 - data : information to data provided as input
     - drivers: list of variables that will be used as input during training.
     - targets: list of variables that will be used as output during training.
-    - label_no_cyclone: label applied to indicate the absence of a TC in the patch
+    - label_no_cyclone: label applied to indicate the absence of a TC in the patch (only for the cnn case)
 
 - loss: informations about loss function
     - cls: class name of the loss function
@@ -87,7 +81,7 @@ With regards to the configuration file, it must be prepared in toml format. The 
     - batch_size: size of a batch of data that will be fed to the network
     - drop_remainder: whether or not to drop the last batch if the number of dataset elements is not divisible by the batch size
     - accumulation_steps: number of gradient accumulation steps before calliing backward propagation
-
+ 
 ## How to
 
 ### Download IBTrACS
@@ -98,6 +92,10 @@ Since the TC Detection case study relies on IBTrACS dataset, it must be download
 - Go to the "_Access Methods_" paragraph
 - On the central panel (named "_Comma Separated Values (CSV)_"), click on **CSV Data**
 - From the page that opens (at https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/v04r01/access/csv/), any IBTrACS dataset can be downloaded (e.g., filtered by basin, global, ecc)
+
+### Download ERA5 data
+
+To download ERA5 data you must need a CDS account and the set of IBTrACS for which the reated ERA5 data is gathered. The script `era5_gathering.py` under `src/dataset` can be used for this purpose.
 
 ## Python3 Environment 
 The code has been tested on Python 3.11.2 with the following dependencies:

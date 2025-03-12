@@ -1,6 +1,6 @@
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #  Program imports
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 from lightning.pytorch.utilities.model_summary import ModelSummary
 from torch.utils.data.distributed import DistributedSampler
 from lightning.pytorch.strategies.ddp import DDPStrategy
@@ -18,17 +18,19 @@ import toml
 import os
 
 import warnings
+
 warnings.simplefilter("ignore")
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #  Custom path imports
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 import sys
-sys.path.append('../resources/library')
+
+sys.path.append("../resources/library")
 from tropical_cyclone.models import *
 from tropical_cyclone.scaling import StandardScaler
 from tropical_cyclone.callbacks import BenchmarkCSV
@@ -38,40 +40,50 @@ from tropical_cyclone.dataset import TCPatchDataset, TCGraphDataset
 # Provenance logger
 try:
     import sys
-    sys.path.append('../../yProvML')
+
+    sys.path.append("../../yProvML")
     import prov4ml
 except ImportError:
-    print('Library prov4ml not found, halting execution...')
+    print("Library prov4ml not found, halting execution...")
     exit(0)
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #  Program Info
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-PROGRAM_NAME = r'''
+PROGRAM_NAME = r"""
   ____________   ____       __            __  _           
  /_  __/ ____/  / __ \___  / /____  _____/ /_(_)___  ____ 
   / / / /      / / / / _ \/ __/ _ \/ ___/ __/ / __ \/ __ \
  / / / /___   / /_/ /  __/ /_/  __/ /__/ /_/ / /_/ / / / /
 /_/  \____/  /_____/\___/\__/\___/\___/\__/_/\____/_/ /_/ 
                                                           
-'''
-PROGRAM_DESCRIPTION = 'Training program for Tropical Cyclone Detection'
+"""
+PROGRAM_DESCRIPTION = "Training program for Tropical Cyclone Detection"
 PROGRAM_ARGUMENTS = [
-    [('-c', '--config'), {'type':str, 'help':'Configuration file for this program', 'required':True}],
-    [('-n', '--num_nodes'), {'type':int, 'help':'Number of cluster GPU nodes', 'required':True}],
-    [('-d', '--devices'), {'type':int, 'help':'Number of GPU devices per node', 'required':True}],
+    [
+        ("-c", "--config"),
+        {"type": str, "help": "Configuration file for this program", "required": True},
+    ],
+    [
+        ("-n", "--num_nodes"),
+        {"type": int, "help": "Number of cluster GPU nodes", "required": True},
+    ],
+    [
+        ("-d", "--devices"),
+        {"type": int, "help": "Number of GPU devices per node", "required": True},
+    ],
 ]
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #  Parse arguments
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 # parse CLI arguments
 parser = argparse.ArgumentParser(prog=PROGRAM_NAME, description=PROGRAM_DESCRIPTION)
@@ -88,21 +100,21 @@ config = munch.munchify(toml.load(args.config))
 num_nodes = args.num_nodes
 devices = args.devices
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #  Parse Configuration file
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 # run
 seed = config.run.seed
-use_case = config.run.use_case # whether to use cnn or gnn training approach
+use_case = config.run.use_case  # whether to use cnn or gnn training approach
 
 # directories
 run_dir = config.dir.run
 experiment_dir = config.dir.experiment
-checkpoint = config.dir.checkpoint if hasattr(config.dir, 'checkpoint') else None
+checkpoint = config.dir.checkpoint if hasattr(config.dir, "checkpoint") else None
 train_src = config.dir.train
 valid_src = config.dir.valid
 scaler_src = config.dir.scaler
@@ -137,7 +149,9 @@ scheduler_annealing_args = config.scheduler.annealing
 # data
 drivers = config.data.drivers
 targets = config.data.targets
-label_no_cyclone = config.data.label_no_cyclone if hasattr(config.data, 'label_no_cyclone') else -1.0
+label_no_cyclone = (
+    config.data.label_no_cyclone if hasattr(config.data, "label_no_cyclone") else -1.0
+)
 
 # train
 epochs = config.train.epochs
@@ -145,24 +159,24 @@ batch_size = config.train.batch_size
 drop_remainder = config.train.drop_remainder
 accumulation_steps = config.train.accumulation_steps
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #  Environment setup
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 # set the device
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
+device = "cuda" if torch.cuda.is_available() else "cpu"
 torch.set_float32_matmul_precision(matmul_precision)
 
 # define important directories
-log_dir = os.path.join(run_dir, 'logs')
-logging_dir = os.path.join(log_dir, 'logging')
-checkpoint_dir = os.path.join(run_dir, 'checkpoints')
+log_dir = os.path.join(run_dir, "logs")
+logging_dir = os.path.join(log_dir, "logging")
+checkpoint_dir = os.path.join(run_dir, "checkpoints")
 
 # define important filenames
-benchmark_csv = os.path.join(run_dir, 'benchmark.csv')
+benchmark_csv = os.path.join(run_dir, "benchmark.csv")
 
 # create experiment directory
 os.makedirs(experiment_dir, exist_ok=True)
@@ -172,51 +186,58 @@ os.makedirs(logging_dir, exist_ok=True)
 os.makedirs(checkpoint_dir, exist_ok=True)
 
 # save training hyperparameters
-shutil.copy(src=args.config, dst=os.path.join(run_dir, 'configuration.toml'))
+shutil.copy(src=args.config, dst=os.path.join(run_dir, "configuration.toml"))
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #  Program variables
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 # load scaler
 scaler = StandardScaler(src=scaler_src, drivers=drivers)
 
 # define user callbacks
 callbacks = [
-    ModelCheckpoint(checkpoint_dir, "epoch-{epoch:04d}-val_loss-{val_loss:.2f}", monitor='val_loss', save_last=True, save_top_k=5, auto_insert_metric_name=False), 
-    BenchmarkCSV(filename=benchmark_csv), 
+    ModelCheckpoint(
+        checkpoint_dir,
+        "epoch-{epoch:04d}-val_loss-{val_loss:.2f}",
+        monitor="val_loss",
+        save_last=True,
+        save_top_k=5,
+        auto_insert_metric_name=False,
+    ),
+    BenchmarkCSV(filename=benchmark_csv),
 ]
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-#  Setup Trainer
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+#  Setup Trainer
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 # init distribution strategy
-strategy = DDPStrategy() if accelerator == 'cuda' else 'auto'
+strategy = DDPStrategy() if accelerator == "cuda" else "auto"
 
 # initialize trainer
 trainer = Trainer(
-    accelerator = accelerator, 
-    strategy = strategy, 
-    devices = devices, 
-    num_nodes = num_nodes, 
-    precision = precision, 
-    callbacks = callbacks, 
-    max_epochs = epochs, 
-    logger = None, 
-    enable_checkpointing = True, 
-    enable_progress_bar = True, 
-    accumulate_grad_batches = accumulation_steps, 
-    use_distributed_sampler = False, 
-    default_root_dir = run_dir, 
-    num_sanity_val_steps = 0, 
-    enable_model_summary = False, 
+    accelerator=accelerator,
+    strategy=strategy,
+    devices=devices,
+    num_nodes=num_nodes,
+    precision=precision,
+    callbacks=callbacks,
+    max_epochs=epochs,
+    logger=None,
+    enable_checkpointing=True,
+    enable_progress_bar=True,
+    accumulate_grad_batches=accumulation_steps,
+    use_distributed_sampler=False,
+    default_root_dir=run_dir,
+    num_sanity_val_steps=0,
+    enable_model_summary=False,
 )
 
 # store parallel execution variables
@@ -225,16 +246,22 @@ node_rank = trainer.node_rank
 global_rank = trainer.global_rank
 local_rank = trainer.local_rank
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #  Init Logger
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 # initialize logger
 logging_level = logging.INFO
-logging.basicConfig(format="[%(asctime)s] %(levelname)s : %(message)s", filename=f'{logging_dir}/dev-{global_rank}.log', filemode='w', level=logging_level, datefmt='%Y-%m-%d %H:%M:%S')
+logging.basicConfig(
+    format="[%(asctime)s] %(levelname)s : %(message)s",
+    filename=f"{logging_dir}/dev-{global_rank}.log",
+    filemode="w",
+    level=logging_level,
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 
 # log
 logging.info(f"Logger initialized. Starting the execution")
@@ -243,32 +270,32 @@ logging.info(f"   Node rank   : {node_rank}")
 logging.info(f"   Global rank : {global_rank}")
 logging.info(f"   Local rank  : {local_rank}")
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #  Initialize provenance logger
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 prov_path = os.path.join(run_dir, "prov_path")
 os.makedirs(prov_path, exist_ok=True)
 
 prov4ml.start_run(
     prov_user_namespace="www.example.org",
-    experiment_name="default", 
-    provenance_save_dir=prov_path, 
+    experiment_name="default",
+    provenance_save_dir=prov_path,
     collect_all_processes=False,
     save_after_n_logs=100,
 )
 
 logging.info(f"Prov4ML logger started running")
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-#  Initialize ML Model
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+#  Initialize ML Model
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 # init model
 prov4ml.log_param("model arguments", model_args)
@@ -279,10 +306,19 @@ optimizer = optimizer_cls(model.parameters(), **optimizer_args)
 
 # init scheduler
 verbose = True if global_rank == 0 else False
-warmup_epochs = scheduler_warmup_args['total_iters']
-warmup = lr_scheduler.LinearLR(optimizer=optimizer, **scheduler_warmup_args, verbose=verbose)
-annealing = lr_scheduler.CosineAnnealingWarmRestarts(optimizer=optimizer, T_0=epochs+1, **scheduler_annealing_args, verbose=verbose)
-scheduler = lr_scheduler.SequentialLR(optimizer=optimizer, schedulers=[warmup, annealing], milestones=[warmup_epochs], verbose=verbose)
+warmup_epochs = scheduler_warmup_args["total_iters"]
+warmup = lr_scheduler.LinearLR(
+    optimizer=optimizer, **scheduler_warmup_args, verbose=verbose
+)
+annealing = lr_scheduler.CosineAnnealingWarmRestarts(
+    optimizer=optimizer, T_0=epochs + 1, **scheduler_annealing_args, verbose=verbose
+)
+scheduler = lr_scheduler.SequentialLR(
+    optimizer=optimizer,
+    schedulers=[warmup, annealing],
+    milestones=[warmup_epochs],
+    verbose=verbose,
+)
 
 # add attributes to the model
 model.optimizer = optimizer
@@ -296,88 +332,148 @@ if not global_rank:
     logging.info(ModelSummary(model=model, max_depth=1))
 
 # log
-logging.info(f'Model and Trainer inizialized')
+logging.info(f"Model and Trainer inizialized")
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #  Load and distribute dataset
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-if use_case == 'cnn':
+if use_case == "cnn":
     # use case-specific import
     from torch.utils.data import DataLoader
 
     # init train and validation datasets
-    train_dataset = TCPatchDataset(src=train_src, drivers=drivers, targets=targets, scaler=scaler, label_no_cyclone=label_no_cyclone, augmentation=True, dtype=dtype)
-    valid_dataset = TCPatchDataset(src=valid_src, drivers=drivers, targets=targets, scaler=scaler, label_no_cyclone=label_no_cyclone, augmentation=True, dtype=dtype)
+    train_dataset = TCPatchDataset(
+        src=train_src,
+        drivers=drivers,
+        targets=targets,
+        scaler=scaler,
+        label_no_cyclone=label_no_cyclone,
+        augmentation=True,
+        dtype=dtype,
+    )
+    valid_dataset = TCPatchDataset(
+        src=valid_src,
+        drivers=drivers,
+        targets=targets,
+        scaler=scaler,
+        label_no_cyclone=label_no_cyclone,
+        augmentation=True,
+        dtype=dtype,
+    )
 
     # log
-    logging.info(f'Train and valid datasets inizialized')
+    logging.info(f"Train and valid datasets inizialized")
 
     # init train and val samplers
-    train_sampler = DistributedWeightedSampler(dataset=train_dataset, num_replicas=world_size, rank=global_rank, shuffle=False)
-    valid_sampler = DistributedWeightedSampler(dataset=valid_dataset, num_replicas=world_size, rank=global_rank, shuffle=False)
+    train_sampler = DistributedWeightedSampler(
+        dataset=train_dataset, num_replicas=world_size, rank=global_rank, shuffle=False
+    )
+    valid_sampler = DistributedWeightedSampler(
+        dataset=valid_dataset, num_replicas=world_size, rank=global_rank, shuffle=False
+    )
 
     # log
-    logging.info(f'Dataset samplers initialized')
+    logging.info(f"Dataset samplers initialized")
 
     # load dataloader
-    train_loader = DataLoader(train_dataset, sampler=train_sampler, batch_size=batch_size, drop_last=drop_remainder)
-    valid_loader = DataLoader(valid_dataset, sampler=valid_sampler, batch_size=batch_size, drop_last=drop_remainder)
-elif use_case == 'gnn':
+    train_loader = DataLoader(
+        train_dataset,
+        sampler=train_sampler,
+        batch_size=batch_size,
+        drop_last=drop_remainder,
+    )
+    valid_loader = DataLoader(
+        valid_dataset,
+        sampler=valid_sampler,
+        batch_size=batch_size,
+        drop_last=drop_remainder,
+    )
+elif use_case == "gnn":
     # use case-specific import
     from torch_geometric.loader import DataLoader
 
     # init train and validation datasets
-    train_dataset = TCGraphDataset(src=train_src, drivers=drivers, targets=targets, scaler=scaler, augmentation=True, dtype=dtype)
-    valid_dataset = TCGraphDataset(src=valid_src, drivers=drivers, targets=targets, scaler=scaler, augmentation=True, dtype=dtype)
+    train_dataset = TCGraphDataset(
+        src=train_src,
+        drivers=drivers,
+        targets=targets,
+        scaler=scaler,
+        augmentation=True,
+        dtype=dtype,
+    )
+    valid_dataset = TCGraphDataset(
+        src=valid_src,
+        drivers=drivers,
+        targets=targets,
+        scaler=scaler,
+        augmentation=True,
+        dtype=dtype,
+    )
 
     # log
-    logging.info(f'Train and valid datasets inizialized')
+    logging.info(f"Train and valid datasets inizialized")
 
     # init train and val samplers
-    train_sampler = DistributedSampler(train_dataset, num_replicas=world_size, rank=global_rank, shuffle=False, drop_last=drop_remainder)
-    valid_sampler = DistributedSampler(valid_dataset, num_replicas=world_size, rank=global_rank, shuffle=False, drop_last=drop_remainder)
+    train_sampler = DistributedSampler(
+        train_dataset,
+        num_replicas=world_size,
+        rank=global_rank,
+        shuffle=False,
+        drop_last=drop_remainder,
+    )
+    valid_sampler = DistributedSampler(
+        valid_dataset,
+        num_replicas=world_size,
+        rank=global_rank,
+        shuffle=False,
+        drop_last=drop_remainder,
+    )
 
     # log
-    logging.info(f'Dataset samplers initialized')
+    logging.info(f"Dataset samplers initialized")
 
     # load dataloader
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=drop_remainder)
-    valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=True, drop_last=drop_remainder)
+    train_loader = DataLoader(
+        train_dataset, batch_size=batch_size, shuffle=True, drop_last=drop_remainder
+    )
+    valid_loader = DataLoader(
+        valid_dataset, batch_size=batch_size, shuffle=True, drop_last=drop_remainder
+    )
 
     pass
 
 # log
-logging.info(f'Dataloaders created')
+logging.info(f"Dataloaders created")
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #  Train and Validate the model
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 # log
-logging.info(f'Training the model')
+logging.info(f"Training the model")
 
 # fit the model
 trainer.fit(model, train_loader, valid_loader, ckpt_path=checkpoint)
 
 # log
-logging.info(f'Model trained')
+logging.info(f"Model trained")
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #  Program End
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 # log
-logging.info(f'Program completed')
+logging.info(f"Program completed")
 
 # log model in provenance graph
 model_name = config.model.cls
@@ -389,4 +485,4 @@ prov4ml.end_run(create_graph=True, create_svg=False)
 # close program
 exit(1)
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #

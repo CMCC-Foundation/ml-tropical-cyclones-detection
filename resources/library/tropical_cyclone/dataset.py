@@ -16,29 +16,47 @@ from tropical_cyclone.scaling import Scaler
 from tropical_cyclone.cyclone import retrieve_predicted_tc
 
 
-
 def read_xarray_dataset(filenames):
     return [xr.load_dataset(filename) for filename in filenames]
 
 
-def read_data_as_torch_tensor(dss: List[str], variables: List[str], dtype = torch.float32):
-    return torch.stack([torch.as_tensor(ds[variables].to_array().load().data, dtype=dtype) for ds in dss], dim=0)
+def read_data_as_torch_tensor(
+    dss: List[str], variables: List[str], dtype=torch.float32
+):
+    return torch.stack(
+        [
+            torch.as_tensor(ds[variables].to_array().load().data, dtype=dtype)
+            for ds in dss
+        ],
+        dim=0,
+    )
 
-def read_zarrs_as_torch_tensor(zarrs: List[xr.Dataset], variables: List[str], dtype = torch.float32):
+
+def read_zarrs_as_torch_tensor(
+    zarrs: List[xr.Dataset], variables: List[str], dtype=torch.float32
+):
     data = []
     for zarr in zarrs:
         x = torch.as_tensor(zarr[variables].to_array().load().data, dtype=dtype)
         if len(x.shape) == 4:
-            x = torch.permute(x, dims=(1,0,2,3))
+            x = torch.permute(x, dims=(1, 0, 2, 3))
         elif len(x.shape) == 3:
-            x = torch.permute(x, dims=(1,0,2))
+            x = torch.permute(x, dims=(1, 0, 2))
         data.append(x)
     return torch.concat(data, dim=0)
 
 
-
 class TCPatchDataset(Dataset_torch):
-    def __init__(self, src: str, drivers: List[str], targets: List[str], scaler: Scaler = None, label_no_cyclone: float = -1.0, augmentation: bool = False, dtype = torch.float32) -> None:
+    def __init__(
+        self,
+        src: str,
+        drivers: List[str],
+        targets: List[str],
+        scaler: Scaler = None,
+        label_no_cyclone: float = -1.0,
+        augmentation: bool = False,
+        dtype=torch.float32,
+    ) -> None:
         super().__init__()
         # store params
         self.label_no_cyclone = label_no_cyclone
@@ -46,9 +64,9 @@ class TCPatchDataset(Dataset_torch):
         self.scaler: Scaler = scaler
         self.dtype = dtype
         # get dataset filenames
-        cy_files = sorted(glob.glob(os.path.join(src,'cyclone*.zarr')))
-        nr_files = sorted(glob.glob(os.path.join(src,'nearest*.zarr')))
-        rn_files = sorted(glob.glob(os.path.join(src,'random*.zarr')))
+        cy_files = sorted(glob.glob(os.path.join(src, "cyclone*.zarr")))
+        nr_files = sorted(glob.glob(os.path.join(src, "nearest*.zarr")))
+        rn_files = sorted(glob.glob(os.path.join(src, "random*.zarr")))
         # open zarr datasets
         cy_zarrs = [xr.open_zarr(file) for file in cy_files]
         nr_zarrs = [xr.open_zarr(file) for file in nr_files]
@@ -58,8 +76,10 @@ class TCPatchDataset(Dataset_torch):
         nr_n = sum([ds.pid.shape[0] for ds in nr_zarrs])
         rn_n = sum([ds.pid.shape[0] for ds in rn_zarrs])
         # get the total number of elements of the entire dataset
-        if self.augmentation: mul = 4
-        else: mul = 1
+        if self.augmentation:
+            mul = 4
+        else:
+            mul = 1
         self.n = cy_n * mul + nr_n + rn_n
         # save cy_n for augmentation purposes
         self.cy_n = cy_n
@@ -89,21 +109,23 @@ class TCPatchDataset(Dataset_torch):
     def _apply_no_cyclone_label(self, y: torch.Tensor):
         return torch.where(y < 0, self.label_no_cyclone, y)
 
-    def _prepare_dataset(self, 
-            cy_zarrs: List[xr.Dataset], 
-            nr_zarrs: List[xr.Dataset], 
-            rn_zarrs: List[xr.Dataset], 
-            drivers: List[str], 
-            targets: List[str]):
+    def _prepare_dataset(
+        self,
+        cy_zarrs: List[xr.Dataset],
+        nr_zarrs: List[xr.Dataset],
+        rn_zarrs: List[xr.Dataset],
+        drivers: List[str],
+        targets: List[str],
+    ):
         # log
-        logging.info(f'reading cyclone data')
+        logging.info(f"reading cyclone data")
         # cyclone data
         x_cy_data = read_zarrs_as_torch_tensor(cy_zarrs, drivers, self.dtype)
         y_cy_data = read_zarrs_as_torch_tensor(cy_zarrs, targets, self.dtype)
         # eventually augment the dataset
         if self.augmentation:
             # log
-            logging.info(f'  adding augmentations')
+            logging.info(f"  adding augmentations")
             # rot 180 data
             x_rot180_cy_data = torch.clone(x_cy_data)
             y_rot180_cy_data = torch.clone(y_cy_data)
@@ -114,19 +136,33 @@ class TCPatchDataset(Dataset_torch):
             x_fliplr_cy_data = torch.clone(x_cy_data)
             y_fliplr_cy_data = torch.clone(y_cy_data)
         # log
-        logging.info(f'reading nearest data')
+        logging.info(f"reading nearest data")
         # nearest data
         x_nr_data = read_zarrs_as_torch_tensor(nr_zarrs, drivers, self.dtype)
         y_nr_data = read_zarrs_as_torch_tensor(nr_zarrs, targets, self.dtype)
         # log
-        logging.info(f'reading random data')
+        logging.info(f"reading random data")
         # random data
         x_rn_data = read_zarrs_as_torch_tensor(rn_zarrs, drivers, self.dtype)
         y_rn_data = read_zarrs_as_torch_tensor(rn_zarrs, targets, self.dtype)
         # if augmentation is added, add TC copies to the data
         if self.augmentation:
-            self.x_data = [x_cy_data, x_rot180_cy_data, x_flipud_cy_data, x_fliplr_cy_data, x_nr_data, x_rn_data]
-            self.y_data = [y_cy_data, y_rot180_cy_data, y_flipud_cy_data, y_fliplr_cy_data, y_nr_data, y_rn_data]
+            self.x_data = [
+                x_cy_data,
+                x_rot180_cy_data,
+                x_flipud_cy_data,
+                x_fliplr_cy_data,
+                x_nr_data,
+                x_rn_data,
+            ]
+            self.y_data = [
+                y_cy_data,
+                y_rot180_cy_data,
+                y_flipud_cy_data,
+                y_fliplr_cy_data,
+                y_nr_data,
+                y_rn_data,
+            ]
         else:
             self.x_data = [x_cy_data, x_nr_data, x_rn_data]
             self.y_data = [y_cy_data, y_nr_data, y_rn_data]
@@ -135,151 +171,150 @@ class TCPatchDataset(Dataset_torch):
     def _augment(self, x, y, index):
         if self.augmentation:
             if index == 1:
-                x, y = coo_rot180(data=(x,y))
+                x, y = coo_rot180(data=(x, y))
                 return x, y
             elif index == 2:
-                x, y = coo_up_down(data=(x,y))
+                x, y = coo_up_down(data=(x, y))
                 return x, y
             elif index == 3:
-                x, y = coo_left_right(data=(x,y))
+                x, y = coo_left_right(data=(x, y))
                 return x, y
         return x, y
 
     def _scale(self, x: torch.Tensor):
         if self.scaler:
-            x = torch.permute(x, dims=(1,2,0)) # C x H x W -> H x W x C
+            x = torch.permute(x, dims=(1, 2, 0))  # C x H x W -> H x W x C
             x = self.scaler.transform(x)
-            x = torch.permute(x, dims=(2,0,1)) # H x W x C -> C x H x W
+            x = torch.permute(x, dims=(2, 0, 1))  # H x W x C -> C x H x W
         return x
 
 
-    
 class TCGraphDataset(Dataset_PyG):
-    def __init__(self,
-                 src: str,
-                 drivers: List[str],
-                 targets: List[str],
-                 scaler: Scaler = None,
-                 augmentation: bool = False,
-                 dtype = torch.float32):
+    def __init__(
+        self,
+        src: str,
+        drivers: List[str],
+        targets: List[str],
+        scaler: Scaler = None,
+        augmentation: bool = False,
+        dtype=torch.float32,
+    ):
         self.src = src
         self.drivers = drivers
         self.targets = targets
         self.scaler = scaler
         self.augmentation = augmentation
         self.dtype = dtype
-        
+
         self.split = self.src.split("/")[-1]
         self.data_list = []
         self.n_cy = -1
-        
+
         # Trigger self.process()
         super(TCGraphDataset, self).__init__(src)
-        
+
         # Remove dummy folders
         try:
             shutil.rmtree(self.processed_dir)
         except OSError as e:
             print(f"Error in cleaning dummy folder: {e.strerror}")
-    
+
     @property
     def raw_dir(self) -> str:
         return os.path.join(self.src)
-    
+
     @property
     def processed_dir(self) -> str:
         return "dummy"
-    
+
     @property
     def raw_file_names(self) -> Union[str, List[str], Tuple[str, ...]]:
         return os.listdir(self.raw_dir)
-    
+
     @property
     def processed_file_names(self) -> Union[str, List[str], Tuple[str, ...]]:
-        return ['dummy']
-    
+        return ["dummy"]
+
     # convert Zarr data into graphs
     def process(self) -> None:
         x_data, y_data = self._prepare_data()
-        
+
         # adjacency structure is the same for all 40x40 grids
         edge_index = self._get_adjacency_info(x_data[0, 0])
-        
+
         for i in range(x_data.shape[0]):
             # x[i] is reshaped from [6, 40, 40], so [C, H, W], to [W, H, C], to [W*H, C], in the same order as self_get_adjacency_info() does
             nodes_feats = x_data[i].permute(2, 1, 0).contiguous().view(-1, 6)
             nodes_labels = y_data[i].permute(2, 1, 0).contiguous().view(-1, 1)
-            
+
             # create and append the Data object
-            data = Data(
-                x=nodes_feats,
-                edge_index=edge_index,
-                y=nodes_labels
-            )
-            
+            data = Data(x=nodes_feats, edge_index=edge_index, y=nodes_labels)
+
             # if scaler exists, transform the data now for faster training later
             if self.scaler != None:
                 data.x = torch.tensor(self.scaler.transform(data.x), dtype=self.dtype)
             self.data_list.append(data)
-        
+
         print(f"\t{self.split} dataset created with {self.len()} elements!")
         print(f"\tshape of elements:")
         print(f"\t\tx: {self.data_list[0].x.shape}")
         print(f"\t\tedge_index: {self.data_list[0].edge_index.shape}")
         print(f"\t\ty: {self.data_list[0].y.shape}")
-        
+
     def _get_adjacency_info(self, x_data) -> torch.Tensor:
         width = x_data.shape[1]
         height = x_data.shape[0]
         coo_links = [[], []]
         this_node = 0
-        
+
         # The order of nodes is the same in how .permute(2, 1, 0).contiguous().view(-1, 6) is done in self.process()
         for w in range(width):
             for h in range(height):
                 # Cell above exists, add the link
-                if (h-1)>=0:
+                if (h - 1) >= 0:
                     coo_links[0].append(this_node)
-                    coo_links[1].append(this_node-1)
+                    coo_links[1].append(this_node - 1)
                 # Cell right exists, add the link
-                if (w+1)<width:
+                if (w + 1) < width:
                     coo_links[0].append(this_node)
-                    coo_links[1].append(this_node+height)
+                    coo_links[1].append(this_node + height)
                 # Cell below exists, add the link
-                if (h+1)<height:
+                if (h + 1) < height:
                     coo_links[0].append(this_node)
-                    coo_links[1].append(this_node+1)
+                    coo_links[1].append(this_node + 1)
                 # Cell left exists, add the link
-                if (w-1)>=0:
+                if (w - 1) >= 0:
                     coo_links[0].append(this_node)
-                    coo_links[1].append(this_node-height)
-                
+                    coo_links[1].append(this_node - height)
+
                 this_node += 1
-        
+
         return torch.tensor(coo_links, dtype=torch.long)
-    
+
     # read Zarr and put together the different types of patches
     def _prepare_data(self) -> Tuple[torch.Tensor, torch.Tensor]:
         # Get dataset filenames
-        cy_files = sorted(glob.glob(os.path.join(self.raw_dir, 'cyclone*.zarr')))
-        if (self.split == 'test'):
-            no_cy_files = sorted(glob.glob(os.path.join(self.raw_dir, 'no_cyclone*.zarr')))
+        cy_files = sorted(glob.glob(os.path.join(self.raw_dir, "cyclone*.zarr")))
+        if self.split == "test":
+            no_cy_files = sorted(
+                glob.glob(os.path.join(self.raw_dir, "no_cyclone*.zarr"))
+            )
         else:
-            nr_files = sorted(glob.glob(os.path.join(self.raw_dir, 'nearest*.zarr')))
-            rn_files = sorted(glob.glob(os.path.join(self.raw_dir, 'random*.zarr')))
-        
+            nr_files = sorted(glob.glob(os.path.join(self.raw_dir, "nearest*.zarr")))
+            rn_files = sorted(glob.glob(os.path.join(self.raw_dir, "random*.zarr")))
+
         # Open zarr datasets
         cy_zarrs = [xr.open_zarr(file) for file in cy_files]
-        if (self.split == 'test'):
+        if self.split == "test":
             no_cy_zarrs = [xr.open_zarr(file) for file in no_cy_files]
         else:
             nr_zarrs = [xr.open_zarr(file) for file in nr_files]
             rn_zarrs = [xr.open_zarr(file) for file in rn_files]
-        
+
         # Get cyclone data
         x_cy_data = read_zarrs_as_torch_tensor(cy_zarrs, self.drivers, self.dtype)
         y_cy_data = read_zarrs_as_torch_tensor(cy_zarrs, self.targets, self.dtype)
-        
+
         # Eventually augment cyclone data
         if self.augmentation:
             # Rot 180, flip up-down and flip left-right the x features
@@ -287,24 +322,32 @@ class TCGraphDataset(Dataset_PyG):
             x_flipud_cy_data = torch.flip(x_cy_data, dims=(2,))
             x_fliplr_cy_data = torch.flip(x_cy_data, dims=(3,))
             # Concatenate the datasets
-            x_cy_data = torch.concat([x_cy_data, x_rot180_cy_data, x_flipud_cy_data, x_fliplr_cy_data], dim=0)
+            x_cy_data = torch.concat(
+                [x_cy_data, x_rot180_cy_data, x_flipud_cy_data, x_fliplr_cy_data], dim=0
+            )
 
             # Same for the y
-            if 'density_map_tc' in self.targets:
+            if "density_map_tc" in self.targets:
                 y_cy_data = self._augment_y_density_map_tc(y_cy_data)
-            elif 'patch_cyclone' in self.targets:
+            elif "patch_cyclone" in self.targets:
                 patch_size = x_cy_data.shape[2]
                 y_cy_data = self._augment_y_patch_cyclone(y_cy_data, patch_size)
-            
+
             print(f"\taugmentation of {self.split} dataset: done!")
-        
+
         print(f"\tN of cyclone patches: {x_cy_data.shape[0]}")
-        
-        if (self.split == 'test'):
+
+        if self.split == "test":
             # Get no cyclone data
-            x_no_cy_data = read_zarrs_as_torch_tensor(no_cy_zarrs, self.drivers, self.dtype)
-            y_no_cy_data = read_zarrs_as_torch_tensor(no_cy_zarrs, self.targets, self.dtype)
-            print(f"\t{self.split} set - N of no cyclone patches: {x_no_cy_data.shape[0]}")
+            x_no_cy_data = read_zarrs_as_torch_tensor(
+                no_cy_zarrs, self.drivers, self.dtype
+            )
+            y_no_cy_data = read_zarrs_as_torch_tensor(
+                no_cy_zarrs, self.targets, self.dtype
+            )
+            print(
+                f"\t{self.split} set - N of no cyclone patches: {x_no_cy_data.shape[0]}"
+            )
         else:
             # Get nearest data
             x_nr_data = read_zarrs_as_torch_tensor(nr_zarrs, self.drivers, self.dtype)
@@ -314,26 +357,26 @@ class TCGraphDataset(Dataset_PyG):
             y_rn_data = read_zarrs_as_torch_tensor(rn_zarrs, self.targets, self.dtype)
             print(f"\t{self.split} set - N of nearest patches: {x_nr_data.shape[0]}")
             print(f"\t{self.split} set - N of random patches: {x_rn_data.shape[0]}")
-        
+
         # save number of cyclone patches for testing purposes
         self.n_cy = x_cy_data.shape[0]
-        
+
         # Group the data
-        if (self.split == 'test'):
+        if self.split == "test":
             x_data = torch.concat([x_cy_data, x_no_cy_data])
             y_data = torch.concat([y_cy_data, y_no_cy_data])
         else:
             x_data = torch.concat([x_cy_data, x_nr_data, x_rn_data])
             y_data = torch.concat([y_cy_data, y_nr_data, y_rn_data])
-        
+
         return x_data, y_data
-   
+
     def _augment_y_density_map_tc(self, y_data) -> torch.Tensor:
         y_rot180 = torch.rot90(y_data, k=2, dims=(2, 3))
         y_flipud = torch.flip(y_data, dims=(2,))
         y_fliplr = torch.flip(y_data, dims=(3,))
         return torch.concat([y_data, y_rot180, y_flipud, y_fliplr], dim=0)
-    
+
     def _augment_y_patch_cyclone(self, y_data, patch_size) -> torch.Tensor:
         y_rot180 = torch.clone(y_data)
         y_flipud = torch.clone(y_data)
@@ -342,77 +385,85 @@ class TCGraphDataset(Dataset_PyG):
         # y rot 180
         for i in range(y_rot180.shape[0]):
             if y_rot180[i, 0, 0] != -1:
-                y_rot180[i] = torch.as_tensor([-y_rot180[i, 0, 0] + patch_size -1, 
-                                               -y_rot180[i, 0, 1] + patch_size -1])
+                y_rot180[i] = torch.as_tensor(
+                    [
+                        -y_rot180[i, 0, 0] + patch_size - 1,
+                        -y_rot180[i, 0, 1] + patch_size - 1,
+                    ]
+                )
         # y flip up-down
         for i in range(y_flipud.shape[0]):
             if y_flipud[i, 0, 0] != -1:
-                y_flipud[i] = torch.as_tensor([-y_flipud[i, 0, 0] + patch_size -1,
-                                               y_flipud[i, 0, 1]])
+                y_flipud[i] = torch.as_tensor(
+                    [-y_flipud[i, 0, 0] + patch_size - 1, y_flipud[i, 0, 1]]
+                )
         # y flip left-right
         for i in range(y_fliplr.shape[0]):
             if y_fliplr[i, 0, 0] != -1:
-                y_fliplr[i] = torch.as_tensor([y_fliplr[i, 0, 0],
-                                               -y_fliplr[i, 0, 1] + patch_size -1])
-        
+                y_fliplr[i] = torch.as_tensor(
+                    [y_fliplr[i, 0, 0], -y_fliplr[i, 0, 1] + patch_size - 1]
+                )
+
         return torch.concat([y_data, y_rot180, y_flipud, y_fliplr], dim=0)
-    
+
     def get(self, idx: int) -> Data:
         return self.data_list[idx]
-    
+
     def len(self) -> int:
         return len(self.data_list)
-    
 
 
 class TCGraphDatasetInference(TCGraphDataset):
     # override
     # no need for augmentation in the final inference, but the initial NetCDF information is needed
-    def __init__(self,
-                 src: str,
-                 year: str,
-                 drivers: List[str],
-                 targets: List[str],
-                 scaler: Scaler = None,
-                 eps: float = 0.1):
-        
-            # inference object for loading and storing data
-            self.inference_obj = Inference()
-            self.ds, _ = self.inference_obj.load_dataset(dataset_dir=src, drivers=drivers, year=year)
-            
-            self.year = year
-            self.eps = eps
-            
-            # sets up the parent __init__() and launches the child class process()
-            super().__init__(src='Inference', drivers=drivers, targets=targets, scaler=scaler)
-    
+    def __init__(
+        self,
+        src: str,
+        year: str,
+        drivers: List[str],
+        targets: List[str],
+        scaler: Scaler = None,
+        eps: float = 0.1,
+    ):
+        # inference object for loading and storing data
+        self.inference_obj = Inference()
+        self.ds, _ = self.inference_obj.load_dataset(
+            dataset_dir=src, drivers=drivers, year=year
+        )
+
+        self.year = year
+        self.eps = eps
+
+        # sets up the parent __init__() and launches the child class process()
+        super().__init__(
+            src="Inference", drivers=drivers, targets=targets, scaler=scaler
+        )
+
     # override
     # convert NetCDF data into graphs, without y and with time and global coordinates united
     def process(self) -> None:
         # get x tensor with format [time*rows*cols, channels, patch_size, patch_size]
         x = self._prepare_data()
-        
+
         # function inherited from parent class
         edge_index = self._get_adjacency_info(x[0, 0])
-        
+
         # iterate over the time*rows*cols dimension
         for i in range(x.shape[0]):
             # x[i] is reshaped from [C, H, W] to [W*H, C], in the same order as self_get_adjacency_info() does # TODO I'm not 100% sure that I start with [C, H, W] or [C, W, H]
             nodes_feats = x[i].permute(2, 1, 0).contiguous().view(-1, 6)
-            
+
             # create and append the Data object
-            data = Data(
-                x=nodes_feats,
-                edge_index=edge_index,
-                y=None
-            )
-            
+            data = Data(x=nodes_feats, edge_index=edge_index, y=None)
+
             # If scaler exists, transform the data now for faster training later
             if self.scaler != None:
                 data.x = torch.tensor(self.scaler.transform(data.x), dtype=self.dtype)
             self.data_list.append(data)
-        
-        print(f"\t{self.split} dataset for year {self.year} created with {self.len()} elements!")
+
+        print(
+            f"\t{self.split} dataset for year {self.year} created with {self.len()} elements!"
+        )
         print(f"\tshape of elements:")
         print(f"\t\tx: {self.data_list[0].x.shape}")
         print(f"\t\tedge_index: {self.data_list[0].edge_index.shape}")
@@ -421,49 +472,52 @@ class TCGraphDatasetInference(TCGraphDataset):
     # read NetCDF and group it by time, global rows and global columns
     def _prepare_data(self, patch_size=40) -> torch.Tensor:
         # get dimensions of the data
-        lons = self.ds['lon'].shape[0]
-        lats = self.ds['lat'].shape[0]
+        lons = self.ds["lon"].shape[0]
+        lats = self.ds["lat"].shape[0]
         rows = lats // patch_size
         cols = lons // patch_size
-        time, channels = self.ds['time'].shape[0], len(self.drivers)
-        
+        time, channels = self.ds["time"].shape[0], len(self.drivers)
+
         # divide dataset in patches
-        patch_ds = self.ds.coarsen({'lat':patch_size, 'lon':patch_size}, boundary="trim").construct({'lon':("cols", "lon_range"), 'lat':("rows", "lat_range")})
+        patch_ds = self.ds.coarsen(
+            {"lat": patch_size, "lon": patch_size}, boundary="trim"
+        ).construct({"lon": ("cols", "lon_range"), "lat": ("rows", "lat_range")})
         # load dataset to numpy
         x = patch_ds[self.drivers].to_array().load().data
         # organize data like this: [time, rows, cols, channels, patch_size, patch_size]
-        x = np.transpose(x, axes=(1,2,4,0,3,5))
+        x = np.transpose(x, axes=(1, 2, 4, 0, 3, 5))
         # reshape aggregating time, rows and cols
-        x = np.reshape(x, newshape=(time*rows*cols, channels, patch_size, patch_size))
-        
+        x = np.reshape(
+            x, newshape=(time * rows * cols, channels, patch_size, patch_size)
+        )
+
         # save in dataset class for later use
         self.time = time
         self.rows = rows
         self.cols = cols
         self.patch_ds = patch_ds
         self.patch_size = patch_size
-        
+
         return torch.as_tensor(x)
-    
+
     # post-process operations to extract the final cyclone coordinates with time
     def post_process(self, tot_pred: np.ndarray) -> None:
-        
         # reshape predictions to [time, rows, cols, 2]
         tot_pred = np.reshape(tot_pred, newshape=(self.time, self.rows, self.cols, 2))
-        
+
         # retrieves the latitude-longitude coordinates from the predicted TCs
-        patch_ds = retrieve_predicted_tc(tot_pred, self.ds, self.patch_ds, self.patch_size, self.eps)
-        
+        patch_ds = retrieve_predicted_tc(
+            tot_pred, self.ds, self.patch_ds, self.patch_size, self.eps
+        )
+
         # gets the dataframe with ISO_TIME, LAT, LON, and WS
         self.detections = get_detections(patch_ds)
-    
+
     # store the post-processed detections on the filesystem
     def store_detections(self, dst: str) -> None:
         self.inference_obj.store_detections(self.detections, dst)
-        
-        
 
-    
+
 ## TODO: NON CANCELLARE
 # class InterTwinTrainvalCycloneDataset(Dataset):
 #     def __init__(self, src: str, drivers: List[str], targets: List[str], scaler = None, augmentation: bool = False) -> None:
@@ -498,7 +552,7 @@ class TCGraphDatasetInference(TCGraphDataset):
 #         return self.n
 
 #     def __getitem__(
-#             self, 
+#             self,
 #             index: int) -> Any:
 #         # get the data from dataset
 #         x, y = self.x_data[index], self.y_data[index]
@@ -508,11 +562,11 @@ class TCGraphDatasetInference(TCGraphDataset):
 #         x, y = self.__augment(x, y, index)
 #         return x, y
 
-#     def __prepare_dataset(self, 
-#             cy_dss: List[xr.Dataset], 
-#             nr_dss: List[xr.Dataset], 
-#             rn_dss: List[xr.Dataset], 
-#             drivers: List[str], 
+#     def __prepare_dataset(self,
+#             cy_dss: List[xr.Dataset],
+#             nr_dss: List[xr.Dataset],
+#             rn_dss: List[xr.Dataset],
+#             drivers: List[str],
 #             targets: List[str]):
 #         # cyclone data
 #         x_cy_data = read_data_as_torch_tensor(cy_dss, drivers)

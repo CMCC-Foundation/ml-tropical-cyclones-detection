@@ -4,8 +4,10 @@ import torch_geometric
 from tqdm import tqdm
 
 import sys
-sys.path.append('../library')
+
+sys.path.append("../library")
 import tropical_cyclone as tc
+
 
 class GraphTester:
     def __init__(
@@ -14,18 +16,16 @@ class GraphTester:
         loader: torch_geometric.loader.DataLoader,
         model: tc.models.BaseLightningModuleGNN,
         nodes_per_graph: int,
-        n_cyclones: int = None
+        n_cyclones: int = None,
     ):
         self.device = device
         self.loader = loader
         self.model = model
         self.nodes_per_graph = nodes_per_graph
         self.n_cyclones = n_cyclones
-    
+
     @torch.no_grad()
-    def get_metrics(self,
-                    threshold: float = 0.5):
-    
+    def get_metrics(self, threshold: float = 0.5):
         # confusion matrix
         true_pos = 0
         false_pos = 0
@@ -46,9 +46,9 @@ class GraphTester:
 
             start = 0
             end = self.nodes_per_graph
-            
+
             # iterate over every patch in the batch
-            while start != (self.nodes_per_graph*len(batch)):
+            while start != (self.nodes_per_graph * len(batch)):
                 max_pred, id_pred = torch.max(pred[start:end], 0)
                 _, id_target = torch.max(batch.y[start:end], 0)
 
@@ -61,7 +61,10 @@ class GraphTester:
                     col_target = id_target // 40
 
                     # calculate Euclidean distance and sum up
-                    dist_sum += np.sqrt((row_pred.cpu()-row_target.cpu())**2 + (col_pred.cpu()-col_target.cpu())**2).item()
+                    dist_sum += np.sqrt(
+                        (row_pred.cpu() - row_target.cpu()) ** 2
+                        + (col_pred.cpu() - col_target.cpu()) ** 2
+                    ).item()
 
                     if patch_id < self.n_cyclones:
                         true_pos += 1
@@ -76,71 +79,81 @@ class GraphTester:
                 patch_id += 1
                 start = end
                 end += self.nodes_per_graph
-        
-        print(f'Threshold: {threshold}')
-        print(f'\tTrue  positives: {true_pos}')
-        print(f'\tFalse positives: {false_pos}')
-        print(f'\tTrue  negatives: {true_neg}')
-        print(f'\tFalse negatives: {false_neg}')
-        
+
+        print(f"Threshold: {threshold}")
+        print(f"\tTrue  positives: {true_pos}")
+        print(f"\tFalse positives: {false_pos}")
+        print(f"\tTrue  negatives: {true_neg}")
+        print(f"\tFalse negatives: {false_neg}")
+
         # in case of division by zero I'm returning an error string with all the metrics that were involved
-        zero_division = ''
-        
+        zero_division = ""
+
         try:
-            dist_sum = dist_sum / (true_pos+false_pos)
+            dist_sum = dist_sum / (true_pos + false_pos)
         except ZeroDivisionError:
-            print("Error: Division by zero in average distance calculation, leaving distance untouched")
-            zero_division += 'distance, '
-        
+            print(
+                "Error: Division by zero in average distance calculation, leaving distance untouched"
+            )
+            zero_division += "distance, "
+
         try:
-            accuracy = (true_pos+true_neg) / (true_pos+false_pos+true_neg+false_neg)
+            accuracy = (true_pos + true_neg) / (
+                true_pos + false_pos + true_neg + false_neg
+            )
         except ZeroDivisionError:
-            print("Error: Division by zero in accuracy calculation, keeping just the numerator")
-            accuracy = (true_pos+true_neg)
-            zero_division += 'accuracy, '
-        
+            print(
+                "Error: Division by zero in accuracy calculation, keeping just the numerator"
+            )
+            accuracy = true_pos + true_neg
+            zero_division += "accuracy, "
+
         try:
-            precision = true_pos/(true_pos+false_pos)
+            precision = true_pos / (true_pos + false_pos)
         except ZeroDivisionError:
-            print("Error: Division by zero in precision calculation, keeping just the numerator")
+            print(
+                "Error: Division by zero in precision calculation, keeping just the numerator"
+            )
             precision = true_pos
-            zero_division += 'precision, '
-        
+            zero_division += "precision, "
+
         try:
-            recall = true_pos/(true_pos+false_neg)
+            recall = true_pos / (true_pos + false_neg)
         except ZeroDivisionError:
-            print("Error: Division by zero in recall calculation, keeping just the numerator")
+            print(
+                "Error: Division by zero in recall calculation, keeping just the numerator"
+            )
             recall = true_pos
-            zero_division += 'recall, '
-        
+            zero_division += "recall, "
+
         try:
-            F1_score = 2*(precision*recall)/(precision+recall)
+            F1_score = 2 * (precision * recall) / (precision + recall)
         except ZeroDivisionError:
-            print("Error: Division by zero in F1_score calculation, keeping just the numerator")
-            F1_score = 2*(precision*recall)
-            zero_division += 'F1_score, '
-        
-        print(f'\tAverage distance between preds and targets: {dist_sum:.3f}')
-        print(f'\tAccuracy:  {accuracy:.6f}')
-        print(f'\tPrecision: {precision:.6f}')
-        print(f'\tRecall:    {recall:.6f}')
-        print(f'\tF1 score:  {F1_score:.6f}')
-    
+            print(
+                "Error: Division by zero in F1_score calculation, keeping just the numerator"
+            )
+            F1_score = 2 * (precision * recall)
+            zero_division += "F1_score, "
+
+        print(f"\tAverage distance between preds and targets: {dist_sum:.3f}")
+        print(f"\tAccuracy:  {accuracy:.6f}")
+        print(f"\tPrecision: {precision:.6f}")
+        print(f"\tRecall:    {recall:.6f}")
+        print(f"\tF1 score:  {F1_score:.6f}")
+
         metrics = {
-            'avg_dist': dist_sum,
-            'accuracy': accuracy,
-            'precision': precision,
-            'recall': recall,
-            'F1 score': F1_score,
-            'zero_division': zero_division
+            "avg_dist": dist_sum,
+            "accuracy": accuracy,
+            "precision": precision,
+            "recall": recall,
+            "F1 score": F1_score,
+            "zero_division": zero_division,
         }
         return metrics
-    
+
     # gets the coordinates from the y predictions in the format [B, 2]
     @torch.no_grad()
-    def get_inference_y(self,
-                        threshold: float = 0.4) -> np.ndarray:
-
+    def get_inference_y(self, threshold: float = 0.4) -> np.ndarray:
         tot_pred = np.empty(shape=(0, 2))
 
         self.model.eval()
@@ -152,7 +165,7 @@ class GraphTester:
             start, end = 0, self.nodes_per_graph
 
             # iterate over every patch in the batch
-            while start != (self.nodes_per_graph*len(batch)):
+            while start != (self.nodes_per_graph * len(batch)):
                 max_pred, id_pred = torch.max(pred[start:end], 0)
 
                 # cyclone not found coordinates
@@ -169,5 +182,5 @@ class GraphTester:
 
                 start = end
                 end += self.nodes_per_graph
-        
+
         return tot_pred
