@@ -10,6 +10,14 @@ valid = '../data/patches/valid'
 test = '../data/patches/test'
 scaler = '../data/patches/scaler_1980_2009.nc'
 
+[mlflow]
+tracking_insecure_tls = 'True'
+username = ''
+password = ''
+tracking_uri = ''
+experiment_name = 'mlflow_experiment'
+run_name = 'run_name'
+
 [torch]
 matmul_precision = "medium"
 dtype = 'torch.float32'
@@ -54,7 +62,7 @@ cls = 'torch.optim.Adam'
     total_iters = 5 # warmup epochs
 
 [train]
-epochs = 1
+epochs = 2
 batch_size = 512
 drop_remainder = true
 accumulation_steps = 1

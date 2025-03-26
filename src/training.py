@@ -37,15 +37,9 @@ from tropical_cyclone.callbacks import BenchmarkCSV
 from tropical_cyclone.sampler import DistributedWeightedSampler
 from tropical_cyclone.dataset import TCPatchDataset, TCGraphDataset
 
-# Provenance logger
-try:
-    import sys
-
-    sys.path.append("../../yProvML")
-    import prov4ml
-except ImportError:
-    print("Library prov4ml not found, halting execution...")
-    exit(0)
+# Itwinai imports
+from itwinai.loggers import MLFlowLogger as IMLFlowLogger, LoggersCollection, Prov4MLLogger
+from itwinai.torch.loggers import ItwinaiLogger
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
@@ -119,6 +113,14 @@ train_src = config.dir.train
 valid_src = config.dir.valid
 scaler_src = config.dir.scaler
 
+# mlflow
+tracking_insecure_tls = config.mlflow.tracking_insecure_tls
+username = config.mlflow.username
+password = config.mlflow.password
+tracking_uri = config.mlflow.tracking_uri
+experiment_name = config.mlflow.experiment_name
+run_name = config.mlflow.run_name
+
 # pytorch
 dtype = eval(config.torch.dtype)
 matmul_precision = config.torch.matmul_precision
@@ -191,6 +193,41 @@ shutil.copy(src=args.config, dst=os.path.join(run_dir, "configuration.toml"))
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+#  Itwinai loggers
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+
+# mlflow environment variables
+os.environ['MLFLOW_TRACKING_INSECURE_TLS'] = tracking_insecure_tls
+os.environ['MLFLOW_TRACKING_USERNAME'] = username
+os.environ['MLFLOW_TRACKING_PASSWORD'] = password
+os.environ['MLFLOW_TRACKING_URI'] = tracking_uri
+os.environ['MLFLOW_EXPERIMENT_NAME'] = experiment_name
+
+# define provenance path
+prov_path = os.path.join(run_dir, "prov_path")
+os.makedirs(prov_path, exist_ok=True)
+
+# define the list of loggers
+_loggers = []
+
+# define Itwinai MLFlow logger
+itwinai_mlflow_logger = IMLFlowLogger(experiment_name=experiment_name, run_name=run_name, tracking_uri=tracking_uri, log_freq='epoch')
+_loggers.append(itwinai_mlflow_logger)
+
+# define Itwinai Prov4ML logger
+itwinai_prov4ml_logger = Prov4MLLogger(experiment_name=experiment_name, provenance_save_dir=prov_path, save_after_n_logs=1, log_on_workers=0)
+_loggers.append(itwinai_prov4ml_logger)
+
+# define loggers collection
+_loggers = LoggersCollection(_loggers)
+
+# get Itwinai loggers
+itwinai_logger = ItwinaiLogger(itwinai_logger=_loggers, skip_finalize=True)
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+
+
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #  Program variables
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -230,7 +267,7 @@ trainer = Trainer(
     precision=precision,
     callbacks=callbacks,
     max_epochs=epochs,
-    logger=None,
+    logger=itwinai_logger,
     enable_checkpointing=True,
     enable_progress_bar=True,
     accumulate_grad_batches=accumulation_steps,
@@ -274,31 +311,11 @@ logging.info(f"   Local rank  : {local_rank}")
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-#  Initialize provenance logger
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-
-prov_path = os.path.join(run_dir, "prov_path")
-os.makedirs(prov_path, exist_ok=True)
-
-prov4ml.start_run(
-    prov_user_namespace="www.example.org",
-    experiment_name="default",
-    provenance_save_dir=prov_path,
-    collect_all_processes=False,
-    save_after_n_logs=100,
-)
-
-logging.info(f"Prov4ML logger started running")
-
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-
-
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #  Initialize ML Model
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 # init model
-prov4ml.log_param("model arguments", model_args)
+#prov4ml.log_param("model arguments", model_args) # todo
 model: nn.Module = model_cls(**model_args)
 
 # init optimizer
@@ -459,8 +476,17 @@ logging.info(f"Dataloaders created")
 # log
 logging.info(f"Training the model")
 
-# fit the model
-trainer.fit(model, train_loader, valid_loader, ckpt_path=checkpoint)
+# start training with logging
+with trainer.logger.itwinai_logger.start_logging(rank=trainer.global_rank):
+    params = {
+        "batch_size": batch_size,
+    }
+    
+    # log the hyperparameters
+    trainer.logger.itwinai_logger.save_hyperparameters(params)
+    
+    # fit the model
+    trainer.fit(model, train_loader, valid_loader, ckpt_path=checkpoint)
 
 # log
 logging.info(f"Model trained")
@@ -477,10 +503,10 @@ logging.info(f"Program completed")
 
 # log model in provenance graph
 model_name = config.model.cls
-prov4ml.log_model(model, model_name)
+#prov4ml.log_model(model, model_name) #todo
 
 # terminate prov4ml
-prov4ml.end_run(create_graph=True, create_svg=False)
+#prov4ml.end_run(create_graph=True, create_svg=False) # todo
 
 # close program
 exit(1)
