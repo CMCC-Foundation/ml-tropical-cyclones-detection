@@ -478,7 +478,22 @@ logging.info(f"Training the model")
 
 # start training with logging
 with trainer.logger.itwinai_logger.start_logging(rank=trainer.global_rank):
+    
+    # defining the hyperparameters to be saved
     params = {
+        "seed": seed,
+        "use_case": use_case,
+        "matmul_precision": matmul_precision,
+        "dtype": dtype,
+        "accelerator": accelerator,
+        "precision": precision,
+        "drivers": drivers,
+        "targets": targets,
+        "model_name": config.model.cls,
+        "loss_name": config.loss.cls,
+        "optimizer_name": config.optimizer.cls,
+        "learning_rate": optimizer_args["lr"],
+        "epochs": epochs,
         "batch_size": batch_size,
     }
     
@@ -487,6 +502,40 @@ with trainer.logger.itwinai_logger.start_logging(rank=trainer.global_rank):
     
     # fit the model
     trainer.fit(model, train_loader, valid_loader, ckpt_path=checkpoint)
+    
+    # save the last model to disk
+    last_model = os.path.join(run_dir, 'last_model.pt')
+    trainer.save_checkpoint(filepath=last_model)
+    
+    # log the model weights
+    trainer.logger.itwinai_logger.log(
+        item=last_model,
+        identifier="model_weights",
+        kind='artifact'
+    )
+    
+    # log model
+    original_model = trainer.model
+    original_model.cpu()
+    trainer.logger.itwinai_logger.log(
+        item=original_model,
+        identifier="last_model",
+        kind='model'
+    )
+
+    # log scaler
+    trainer.logger.itwinai_logger.log(
+        item=scaler_src,
+        identifier="scaler",
+        kind='artifact'
+    )
+
+    # log provenance
+    trainer.logger.itwinai_logger.log(
+        item=None,
+        identifier=None,
+        kind="prov_documents"
+    )
 
 # log
 logging.info(f"Model trained")
