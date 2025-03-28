@@ -9,6 +9,14 @@ valid = '../data/patches/valid'
 run = '../experiments/01_vgg_v3_relu'
 scaler = '../data/patches/scaler_1980_2009.nc'
 
+[mlflow]
+tracking_insecure_tls = 'True'
+username = ''
+password = ''
+tracking_uri = ''
+experiment_name = 'mlflow_experiment'
+run_name = 'run_name'
+
 [torch]
 matmul_precision = "medium"
 dtype = 'torch.float32'

@@ -14,10 +14,51 @@ import torch_geometric
 from torch_geometric.utils import dropout_edge
 
 
-class BaseLightningModule(L.LightningModule):
+# parent class to pass down the tracking capabilities of itwinai
+class LightningTrackingParent(L.LightningModule):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.callback_metrics = {}
+        self._trn_loss = {'sum': 0, 'steps': 0}
+        self._vld_loss = {'sum': 0, 'steps': 0}
+        self._training_metrics = {'steps' : 0, 'metrics' : {}}
+        self._validation_metrics = {'steps' : 0, 'metrics' : {}}
+    
+    def on_train_epoch_end(self) -> None:
+        if self.logger.experiment is not None:
+            context='training'
+            self.logger.experiment.log(item=self.current_epoch, identifier="epoch", kind='metric', step=self.current_epoch, context=context)
+            self.logger.experiment.log(item=self, identifier=f"model_version_{self.current_epoch}", kind='model_version', step=self.current_epoch, context=context)
+            self.logger.experiment.log(item=None, identifier=None, kind='system', step=self.current_epoch, context=context)
+            self.logger.experiment.log(item=None, identifier=None, kind='carbon', step=self.current_epoch, context=context)
+            self.logger.experiment.log(item=None, identifier="train_epoch_time", kind='execution_time', step=self.current_epoch, context=context)
+            self.logger.experiment.log(item=self._trn_loss['sum']/self._trn_loss['steps'], identifier="training_loss", kind='metric', step=self.current_epoch, context=context)
+        self._training_metrics = {'steps' : 0, 'metrics' : {}}
+        self._trn_loss = {'sum': 0, 'steps': 0}
+    
+    def on_validation_epoch_end(self) -> None:
+        if self.logger.experiment is not None:
+            context='validation'
+            self.logger.experiment.log(item=self.current_epoch, identifier="epoch", kind='metric', step=self.current_epoch, context=context)
+            self.logger.experiment.log(item=self, identifier=f"model_version_{self.current_epoch}", kind='model_version', step=self.current_epoch, context=context)
+            self.logger.experiment.log(item=None, identifier=None, kind='system', step=self.current_epoch, context=context)
+            self.logger.experiment.log(item=None, identifier=None, kind='system', step=self.current_epoch, context=context)
+            self.logger.experiment.log(item=None, identifier=None, kind='carbon', step=self.current_epoch, context=context)
+            self.logger.experiment.log(item=None, identifier="validation_epoch_time", kind='execution_time', step=self.current_epoch, context=context)
+            self.logger.experiment.log(item=self._vld_loss['sum']/self._vld_loss['steps'], identifier="validation_loss", kind='metric', step=self.current_epoch, context=context)
+        self._validation_metrics = {'steps' : 0, 'metrics' : {}}
+        self._vld_loss = {'sum': 0, 'steps': 0}
+        
+    def configure_optimizers(self):
+        return {
+            "optimizer": self.optimizer,
+            "lr_scheduler": self.lr_scheduler,
+        }
+
+
+class BaseLightningModule(LightningTrackingParent):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
 
     def training_step(self, batch, batch_idx):
         # get data from the batch
@@ -36,6 +77,12 @@ class BaseLightningModule(L.LightningModule):
         # log the outputs
         self.callback_metrics = {**self.callback_metrics, **log_dict}
         self.log("train_loss", loss, prog_bar=True)
+        
+        # mlflow logs
+        self._training_loss = loss
+        self._trn_loss['sum'] += loss
+        self._trn_loss['steps'] += 1
+        
         # return the loss
         return {"loss": loss}
 
@@ -56,11 +103,14 @@ class BaseLightningModule(L.LightningModule):
         # log the outputs
         self.callback_metrics = {**self.callback_metrics, **log_dict}
         self.log("val_loss", loss, prog_bar=True)
+        
+        # mlflow logs
+        self._validation_loss = loss
+        self._vld_loss['sum'] += loss
+        self._vld_loss['steps'] += 1
+        
         # return the loss
         return {"loss": loss}
-
-    def configure_optimizers(self):
-        return {"optimizer": self.optimizer, "lr_scheduler": self.lr_scheduler}
 
 
 class VGG_V1(BaseLightningModule):
@@ -501,14 +551,9 @@ class SwinTropicalCyclone(BaseLightningModule):
         )
 
 
-class BaseLightningModuleGNN(pl.LightningModule):
+class BaseLightningModuleGNN(LightningTrackingParent):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self.callback_metrics = {}
-        self._training_metrics = {'steps' : 0, 'metrics' : {}}
-        self._validation_metrics = {'steps' : 0, 'metrics' : {}}
-        self._trn_loss = {'sum': 0, 'steps': 0}
-        self._vld_loss = {'sum': 0, 'steps': 0}
 
     def training_step(self, batch, batch_idx):
         # forward pass + loss computation
@@ -556,12 +601,6 @@ class BaseLightningModuleGNN(pl.LightningModule):
         
         return {"loss": loss}
 
-    def configure_optimizers(self):
-        return {
-            "optimizer": self.optimizer,
-            "lr_scheduler": self.lr_scheduler,
-        }
-
     def on_validation_model_eval(self) -> None:
         self.eval()
 
@@ -576,33 +615,6 @@ class BaseLightningModuleGNN(pl.LightningModule):
 
     def on_predict_model_eval(self) -> None:
         self.eval()
-    
-    def on_train_epoch_end(self) -> None:
-        if self.logger.experiment is not None:
-            context='training'
-            self.logger.experiment.log(item=self.current_epoch, identifier="epoch", kind='metric', step=self.current_epoch, context=context)
-            self.logger.experiment.log(item=self, identifier=f"model_version_{self.current_epoch}", kind='model_version', step=self.current_epoch, context=context)
-            self.logger.experiment.log(item=None, identifier=None, kind='system', step=self.current_epoch, context=context)
-            self.logger.experiment.log(item=None, identifier=None, kind='carbon', step=self.current_epoch, context=context)
-            self.logger.experiment.log(item=None, identifier="train_epoch_time", kind='execution_time', step=self.current_epoch, context=context)
-            self.logger.experiment.log(item=self._trn_loss['sum']/self._trn_loss['steps'], identifier="training_loss", kind='metric', step=self.current_epoch, context=context)
-
-        self._training_metrics = {'steps' : 0, 'metrics' : {}}
-        self._trn_loss = {'sum': 0, 'steps': 0}
-    
-    def on_validation_epoch_end(self) -> None:
-        if self.logger.experiment is not None:
-            context='validation'
-            self.logger.experiment.log(item=self.current_epoch, identifier="epoch", kind='metric', step=self.current_epoch, context=context)
-            self.logger.experiment.log(item=self, identifier=f"model_version_{self.current_epoch}", kind='model_version', step=self.current_epoch, context=context)
-            self.logger.experiment.log(item=None, identifier=None, kind='system', step=self.current_epoch, context=context)
-            self.logger.experiment.log(item=None, identifier=None, kind='system', step=self.current_epoch, context=context)
-            self.logger.experiment.log(item=None, identifier=None, kind='carbon', step=self.current_epoch, context=context)
-            self.logger.experiment.log(item=None, identifier="validation_epoch_time", kind='execution_time', step=self.current_epoch, context=context)
-            self.logger.experiment.log(item=self._vld_loss['sum']/self._vld_loss['steps'], identifier="validation_loss", kind='metric', step=self.current_epoch, context=context)
-
-        self._validation_metrics = {'steps' : 0, 'metrics' : {}}
-        self._vld_loss = {'sum': 0, 'steps': 0}
 
 
 class GraphUNet(BaseLightningModuleGNN):
