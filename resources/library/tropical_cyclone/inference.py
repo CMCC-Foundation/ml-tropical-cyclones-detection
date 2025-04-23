@@ -241,8 +241,6 @@ class Inference:
     def _parse_config_file(self, config):
         drivers = config.data.drivers
         targets = config.data.targets
-        print(config.dir.scaler)
-        print(os.getcwd())
         scaler = StandardScaler(
             mean_src=config.dir.scaler.mean, 
             std_src=config.dir.scaler.std, 

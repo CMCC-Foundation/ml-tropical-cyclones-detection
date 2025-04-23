@@ -1,9 +1,11 @@
 # import warnings
 import numpy as np
+import pandas as pd
 import cartopy.crs as ccrs
 import cartopy.feature as cf
 import matplotlib.ticker as mticker
 from matplotlib import pyplot as plt
+import matplotlib.transforms as transforms
 from cartopy.mpl.ticker import LongitudeFormatter, LatitudeFormatter
 
 
@@ -215,3 +217,74 @@ def plot_tracks(
     if outfile:
         plt.savefig(f"{outfile}", dpi=300, bbox_inches="tight")
     plt.show()
+
+
+
+def plot_pod_and_far(
+    algo_results: pd.DataFrame, label, outfile = None
+):
+    x = np.arange(len(algo_results))  # the label locations
+    width = 0.4  # the width of the bars
+    multiplier = 0
+    
+    fig, ax = plt.subplots(layout='constrained', figsize=(12,6))
+    
+    # add horizontal mean
+    ax.hlines(y=algo_results['pod'].mean(), xmin=-0.3, xmax=len(algo_results)-1.2, zorder=0, color='tab:blue', label='Average POD')
+    trans = transforms.blended_transform_factory(ax.get_yticklabels()[0].get_transform(), ax.transData)
+    ax.text(0, algo_results['pod'].mean(), "{:.0f} %".format(algo_results['pod'].mean()), color="tab:blue", transform=trans, ha="right", va="center")
+    
+    ax.hlines(y=algo_results['far'].mean(), xmin=-0.3, xmax=len(algo_results)-1.2, zorder=999, color='tab:red', label='Average FAR')
+    trans = transforms.blended_transform_factory(ax.get_yticklabels()[0].get_transform(), ax.transData)
+    ax.text(0, algo_results['far'].mean(), "{:.0f} %".format(algo_results['far'].mean()), color="tab:red", transform=trans, ha="right", va="center")
+    
+    offset = width * multiplier
+    rects = ax.bar(x + offset, np.round(algo_results['pod'],2), width, label=f'POD' + label, color='tab:blue')
+    ax.bar_label(rects, padding=3)
+    multiplier += 1
+    
+    offset = width * multiplier
+    rects = ax.bar(x + offset, np.round(algo_results['far'],2), width, label=f'FAR' + label, color='tab:red')
+    ax.bar_label(rects, padding=3)
+    multiplier += 1
+    
+    # Add some text for labels, title and custom x-axis tick labels, etc.
+    ax.set_ylabel('Score', size = 14)
+    ax.set_xlabel('TC trackers', size = 14)
+    ax.set_xticks(x + width/2, algo_results['algo'], fontsize=12)
+    ax.set_ylim(0, 100)
+    
+    box = ax.get_position()
+    ax.set_position([box.x0, box.y0, box.width, box.height])
+    ax.legend(loc='upper left', markerscale=10, edgecolor='gray', framealpha=1, ncol=4, bbox_to_anchor=(0.2 , 0.98))
+    
+    plt.tight_layout()
+    if outfile:
+        plt.savefig(outfile, dpi=300)
+    else:
+        plt.show()
+
+
+def plot_track_durations(
+    model_name, det_tracks, obs_tracks, outfile=None
+):
+    plt.figure(figsize=(10,6))
+
+    track_durations = obs_tracks.track_id.value_counts().to_numpy()//4
+    bins = (track_durations).max()
+    freq_x, bin_edges_x = np.histogram(track_durations, bins=bins, range=(3,bins+3))
+    plt.plot(bin_edges_x[:-3], freq_x[:-2], label='IBTrACS', drawstyle='steps', linewidth=2.0, color='tab:blue')
+
+    track_durations = det_tracks.track_id.value_counts().to_numpy()//4
+    bins = (track_durations).max()
+    freq_x, bin_edges_x = np.histogram(track_durations, bins=bins, range=(3,bins+3))
+    plt.plot(bin_edges_x[:-3], freq_x[:-2], label=model_name.upper(), drawstyle='steps', linewidth=2.0, color='tab:red')
+
+    plt.xlabel('Track duration (days)', fontdict={'weight':'bold'})
+    plt.title(f'Track Duration')
+
+    plt.legend()
+    if outfile:
+        plt.savefig(outfile, dpi=300)
+    else:
+        plt.show()

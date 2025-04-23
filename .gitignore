@@ -3,7 +3,6 @@ __pycache__
 data
 experiments
 .DS_Store
-dynamicopy*
 .ipynb_checkpoints
 src/dataset/logs
 backup

@@ -1,0 +1,20 @@
+Metadata-Version: 2.1
+Name: dynamicopy
+Version: 0.6.1
+Summary: A set of tool to use and analyse netCDF _data
+Author: Stella Bourdin
+Author-email: stella.bourdin@lsce.ipsl.fr
+Classifier: Development Status :: 3 - Alpha
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: GNU General Public License v3 (GPLv3)
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.6
+Description-Content-Type: text/markdown
+License-File: LICENSE
+
+# DynamicoPy
+
+This is a package designed to fasten our analysis of climate models data with netCDF file. 
+
+You can install this package with pip : `pip install dynamicopy`
+PyPI release here : https://pypi.org/project/dynamicopy/ 

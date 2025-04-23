@@ -6,6 +6,7 @@ from scipy.ndimage import gaussian_filter
 from haversine import haversine_vector
 import pandas as pd
 import xarray as xr
+import pandas as pd
 import numpy as np
 import os
 
@@ -625,6 +626,30 @@ def track_matching(
     match_df = match_df.reset_index(drop=True)
 
     return match_df
+
+def compute_pod_and_far(dynamicopy, algo, algo_id, obs, max_dist, print_results=False):
+    matches = dynamicopy.match_tracks(algo, obs, algo_id, 'ibtracs', max_dist=max_dist, min_overlap=0, ref=True)
+    
+    n_gt_match = len(matches[f'id_ibtracs'].unique())
+    n_algo_match = len(matches[f'id_{algo_id}'].unique())
+    n_observations = len(obs.track_id.unique())
+    n_detections = len(algo.track_id.unique())
+    
+    H, M, FA = n_gt_match, n_observations - n_gt_match, n_detections - n_algo_match
+    POD = H / (H + M)
+    FAR = FA / (H + FA)
+    
+    matches = matches.rename(columns={'temp':'matching_timesteps'})
+    
+    if print_results:
+        print(f'Algorithm : {algo_id.upper()}\n   Hits : {H}\n   Misses : {M}\n   False Alarms : {FA}\n   POD : {POD}\n   FAR : {FAR}\n')
+    return matches, pd.DataFrame(data={
+            'algo':[algo_id.upper()], 
+            'hits':[H], 
+            'misses':[M], 
+            'false alarms':[FA], 
+            'pod':[POD], 
+            'far':[FAR]})
 
 
 # INCORRECT TRACKER
