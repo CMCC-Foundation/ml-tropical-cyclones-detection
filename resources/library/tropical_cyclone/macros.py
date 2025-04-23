@@ -71,8 +71,8 @@ VALID_YEARS = [2010, 2011, 2012, 2013]
 TEST_YEARS = [2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021]
 
 
-ERA5_CMIP6_DRIVERS_MAPPING = {
-    "t_500": "ta_500",
-    "msl": "psl",
-    "vo_850": "rv850",
-}
+# ERA5_CMIP6_DRIVERS_MAPPING = {
+#     "t_500": "ta_500",
+#     "msl": "psl",
+#     "vo_850": "rv850",
+# }

@@ -3,7 +3,7 @@ from tropical_cyclone.cyclone import (
     init_track_dataframe,
     tracking_algorithm,
 )
-from tropical_cyclone.macros import ERA5_CMIP6_DRIVERS_MAPPING
+# from tropical_cyclone.macros import ERA5_CMIP6_DRIVERS_MAPPING
 from tropical_cyclone.georeferencing import round_to_grid
 from tropical_cyclone.scaling import StandardScaler
 from tropical_cyclone.models import *
@@ -241,25 +241,25 @@ class Inference:
     def _parse_config_file(self, config):
         drivers = config.data.drivers
         targets = config.data.targets
-        scaler = StandardScaler(src=config.dir.scaler, drivers=drivers)
+        print(config.dir.scaler)
+        print(os.getcwd())
+        scaler = StandardScaler(
+            mean_src=config.dir.scaler.mean, 
+            std_src=config.dir.scaler.std, 
+            drivers=drivers)
         return scaler, drivers, targets
 
-    def load_dataset(self, dataset_dir, drivers, year=None, is_cmip6=False):
-        if is_cmip6:
-            drivers = [ERA5_CMIP6_DRIVERS_MAPPING[d] for d in drivers]
-        if is_cmip6:
-            ds = xr.open_zarr(os.path.join(dataset_dir, "dataset.zarr"))
+    def load_dataset(self, dataset_dir, year=None):
+        if year is not None:
+            pattern = f"{year}*.nc"
         else:
-            if year is not None:
-                pattern = f"{year}*.nc"
-            else:
-                pattern = f"*.nc"
-            files = sorted(glob.glob(os.path.join(dataset_dir, pattern)))
-            logging.info(f"Opening dataset containing {len(files)} files")
-            if len(files) == 0:
-                return None
-            ds = xr.open_mfdataset(files)
-            logging.info(f"Dataset opened")
+            pattern = f"*.nc"
+        files = sorted(glob.glob(os.path.join(dataset_dir, pattern)))
+        logging.info(f"Opening dataset containing {len(files)} files")
+        if len(files) == 0:
+            return None
+        ds = xr.open_mfdataset(files)
+        logging.info(f"Dataset opened")
         if ds is None:
             logging.info(f"No dataset found")
             return None
@@ -273,7 +273,7 @@ class Inference:
         detected_tracks = init_track_dataframe(detections)
         # apply tracking scheme to detections
         detected_tracks = tracking_algorithm(
-            track_df=detected_tracks,
+            detected_tracks=detected_tracks,
             max_distance=max_distance,
             min_track_count=min_track_count,
         )

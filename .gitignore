@@ -6,3 +6,5 @@ experiments
 dynamicopy*
 .ipynb_checkpoints
 src/dataset/logs
+backup
+data
