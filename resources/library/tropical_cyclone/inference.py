@@ -267,11 +267,16 @@ class Inference:
             drivers=drivers)
         return scaler, drivers, targets
 
-    def load_dataset(self, dataset_dir, year=None):
+    def load_dataset(self, dataset_dir, year=None, month=None):
         if year is not None:
-            pattern = f"{year}*.nc"
+            y = year
         else:
-            pattern = f"*.nc"
+            y = "*"
+        if month is not None:
+            m = month
+        else:
+            m = "*"
+        pattern = f"{y}_{m}_*.nc"
         files = sorted(glob.glob(os.path.join(dataset_dir, pattern)))
         logging.info(f"Opening dataset containing {len(files)} files")
         if len(files) == 0:
@@ -299,10 +304,14 @@ class Inference:
 
 
 class SingleModelInference(Inference):
-    def __init__(self, model_dir, device="cpu") -> None:
+    def __init__(self, model_dir=None, model=None, config_file=None, device="cpu") -> None:
         super().__init__(device)
         self.model_dir = model_dir
-        self.model, self.config, _ = load_trained_model(model_dir, device)
+        if model is not None:
+            self.model = model 
+            self.config = munch.munchify(toml.load(config_file))
+        elif model_dir is not None:
+            self.model, self.config, _ = load_trained_model(model_dir, device)
         self.scaler, self.drivers, self.targets = self._parse_config_file(self.config)
 
     def predict(

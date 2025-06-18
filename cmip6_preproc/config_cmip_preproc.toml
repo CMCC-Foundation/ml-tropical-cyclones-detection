@@ -1,0 +1,19 @@
+[dir]
+root = "/Users/mdecarlo/Documents/CMCC/Projects/interTwin/CMIP6"
+
+[files]
+ua = "ua_6hrPlevPt_CMCC-CM2-VHR4_hist-1950_r1i1p1f1_gn_201408010000-201408311800.nc"
+va = "va_6hrPlevPt_CMCC-CM2-VHR4_hist-1950_r1i1p1f1_gn_201408010000-201408311800.nc"
+psl = "psl_6hrPlevPt_CMCC-CM2-VHR4_hist-1950_r1i1p1f1_gn_201408010000-201408311800.nc"
+out_fname = "cmip_850hPa_masked_test3.nc"
+
+[coords]
+lat_min = 0.0
+lat_max = 70.0
+lon_min = 100.0
+lon_max = 320.0
+
+[regrid]
+enabled = true
+era5_grid = "era5_grid.txt"
+output_path = "masked_regridded.nc"

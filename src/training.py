@@ -119,7 +119,7 @@ username = config.mlflow.username
 password = config.mlflow.password
 tracking_uri = config.mlflow.tracking_uri
 experiment_name = config.mlflow.experiment_name
-run_name = config.mlflow.run_name
+run_name = config.mlflow.run_name + "_" + config.model.cls + "_E" + str(config.train.epochs) + "_B" + str(config.train.batch_size) + "_LR" + str('{0:.0e}'.format(config.optimizer.args.lr).replace("e-0", "e-"))
 
 # pytorch
 dtype = eval(config.torch.dtype)
@@ -495,6 +495,7 @@ with trainer.logger.itwinai_logger.start_logging(rank=trainer.global_rank):
         "learning_rate": optimizer_args["lr"],
         "epochs": epochs,
         "batch_size": batch_size,
+        # "code_version": 
     }
     
     # log the hyperparameters
@@ -549,15 +550,5 @@ logging.info(f"Model trained")
 
 # log
 logging.info(f"Program completed")
-
-# log model in provenance graph
-model_name = config.model.cls
-#prov4ml.log_model(model, model_name) #todo
-
-# terminate prov4ml
-#prov4ml.end_run(create_graph=True, create_svg=False) # todo
-
-# close program
-exit(1)
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
