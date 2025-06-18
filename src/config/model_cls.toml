@@ -1,0 +1,70 @@
+[run]
+seed = 42
+use_case = 'cnn'
+
+[dir]
+experiment = '../experiments'
+train = '../data/patches/train'
+valid = '../data/patches/valid'
+run = '../experiments/model_cls'
+scaler = '../data/patches/scaler_1980_2009.nc'
+
+[mlflow]
+tracking_insecure_tls = 'True'
+username = ''
+password = ''
+tracking_uri = ''
+experiment_name = 'mlflow_experiment'
+run_name = 'run_name'
+
+[torch]
+matmul_precision = "medium"
+dtype = 'torch.float32'
+
+[lightning]
+accelerator = "cuda"
+precision = "32-true"
+
+[data]
+drivers = ['fg10', 'i10fg', 'msl', 't_500', 't_300', 'vo_850']
+targets = ['patch_cyclone']
+label_no_cyclone = -1.0
+augmentation = ['lr','ud','rot']
+classify = true
+patches = ['cy','nr','rn']
+
+[model]
+monitor = 'val_loss'
+cls = 'VGG_V3'
+metrics = []
+    [model.args]
+    in_channels = 2
+    out_channels = 1
+    activation = 'nn.ReLU'
+    out_activation = 'nn.Sigmoid'
+    kernel_size = 3
+
+[loss]
+cls = "nn.BCELoss"
+[loss.args]
+
+[optimizer]
+cls = "torch.optim.AdamW"
+    [optimizer.args]
+        lr = 8e-5
+        betas = [0.9, 0.95]
+        weight_decay = 1e-4
+
+[scheduler]
+    [scheduler.warmup]
+        total_iters = 20 # warmup epochs
+        start_factor = 0.0001
+        end_factor = 1.0
+    [scheduler.annealing]
+        eta_min = 5e-8 # minimum learning rate
+
+[train]
+epochs = 1
+batch_size = 128
+drop_remainder = true
+accumulation_steps = 1

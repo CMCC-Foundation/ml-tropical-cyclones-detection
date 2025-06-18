@@ -113,7 +113,15 @@ def get_tropical_cyclone_positions(
     return ds
 
 
-def retrieve_predicted_tc(y_pred, ds, patch_ds, patch_size, eps: float = 0.1):
+def retrieve_predicted_tc(
+        y_pred,                # TC locations
+        ds,                    # the original dataset with `lat` and `lon`
+        patch_ds,              # the patch dataset to store the TC centers
+        patch_size,            # the size of a patch
+        eps: float = 0.1,      # the confidence for negative values
+        y_pred_cls = None,     # if provided, it is the probability for having a TC in the patch
+        y_pred_loc_std = None, # if provided, it is the std associated to the TC locations
+        ):
     """
     Retrieves the latitude-longitude coordinates from the passed predicted TCs
 
@@ -130,44 +138,34 @@ def retrieve_predicted_tc(y_pred, ds, patch_ds, patch_size, eps: float = 0.1):
             # for each column
             for j in range(y_pred.shape[2]):
                 # correct the prediction if `eps` <= x <= 0.0 (slightly negative, could be an oscillation)
-                if y_pred[t, i, j, 0] < 0.0:
-                    if y_pred[t, i, j, 0] >= -eps:
-                        y_pred[t, i, j, 0] = 0.0
-                if y_pred[t, i, j, 1] < 0.0:
-                    if y_pred[t, i, j, 1] >= -eps:
-                        y_pred[t, i, j, 1] = 0.0
+                if y_pred[t,i,j,0] < 0.0:
+                    if y_pred[t,i,j,0] >= -eps:
+                        y_pred[t,i,j,0] = 0.0
+                if y_pred[t,i,j,1] < 0.0:
+                    if y_pred[t,i,j,1] >= -eps:
+                        y_pred[t,i,j,1] = 0.0
                 # correct the prediction if x > 39.0 (too high, could be an oscillation)
-                if y_pred[t, i, j, 0] >= patch_size - 1:
-                    y_pred[t, i, j, 0] = patch_size - 1
-                if y_pred[t, i, j, 1] >= patch_size - 1:
-                    y_pred[t, i, j, 1] = patch_size - 1
+                if y_pred[t,i,j,0] >= patch_size - 1:
+                    y_pred[t,i,j,0] = patch_size - 1
+                if y_pred[t,i,j,1] >= patch_size - 1:
+                    y_pred[t,i,j,1] = patch_size - 1
                 # if the model prediction is valid
-                if y_pred[t, i, j, 0] >= 0.0 and y_pred[t, i, j, 1] >= 0.0:
+                if y_pred[t,i,j,0] >= 0.0 and y_pred[t,i,j,1] >= 0.0:
                     try:
                         # retrieve global row-col coordinates of the TC
-                        global_rowcol = from_local_to_global(
-                            (i, j), y_pred[t, i, j, :], patch_size
-                        )
+                        global_rowcol = from_local_to_global((i,j), y_pred[t,i,j,:], patch_size)
                         # retrieve global lat-lon coordinates of the TC
-                        cyclone_latlon_coords[t, i, j, :] = (
-                            ds["lat"].data[global_rowcol[0]],
-                            ds["lon"].data[global_rowcol[1]],
-                        )
-                        cyclone_rowcol_coords[t, i, j, :] = (
-                            global_rowcol[0],
-                            global_rowcol[1],
-                        )
+                        cyclone_latlon_coords[t,i,j,:] = (ds['lat'].data[global_rowcol[0]], ds['lon'].data[global_rowcol[1]])
+                        cyclone_rowcol_coords[t,i,j,:] = (global_rowcol[0], global_rowcol[1])
                     except:
                         continue
     # update patch_ds cyclone_information
-    patch_ds["patch_cyclone_pred"] = (
-        ("time", "rows", "cols", "coordinate"),
-        cyclone_latlon_coords,
-    )
-    patch_ds["patch_rowcol_pred"] = (
-        ("time", "rows", "cols", "rowcol"),
-        cyclone_rowcol_coords,
-    )
+    patch_ds['patch_cyclone_pred'] = (('time','rows','cols','coordinate'), cyclone_latlon_coords)
+    patch_ds['patch_rowcol_pred'] = (('time','rows','cols','rowcol'), cyclone_rowcol_coords)
+    if y_pred_cls is not None:
+        patch_ds['patch_cyclone_probability'] = (('time','rows','cols','prob'), y_pred_cls)
+    if y_pred_loc_std is not None:
+        patch_ds['patch_cyclone_pred_std'] = (('time','rows','cols','coordinate'), y_pred_loc_std)
     return patch_ds
 
 

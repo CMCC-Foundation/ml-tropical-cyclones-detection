@@ -190,31 +190,51 @@ def predict_with_models(models, data_loader, device="cpu"):
     return models_predictions
 
 
-def get_detections(patch_ds):
+def predict_with_models_cls(models, data_loader, device = 'cpu'):
+    if type(models) != list: models = [models]
+    models_predictions = []
+    for model in models:
+        # predict with the trained model
+        y_pred = np.empty(shape=(0,1))
+        for data in tqdm(data_loader):
+            x = data[0].to(device)
+            y_pred = np.concatenate([y_pred, model(x).cpu().detach().numpy()])
+        # reshape disgregating time, rows and cols
+        models_predictions.append(y_pred)
+    # stack together each model's predictions
+    models_predictions = np.stack(models_predictions, axis=1)
+    if models_predictions.shape[1] == 1: models_predictions = models_predictions[:,0]
+    return models_predictions
+
+
+def get_detections(patch_ds: xr.Dataset):
+    if 'patch_cyclone_probability' in patch_ds.variables:
+        variables = ['patch_cyclone_pred', 'patch_cyclone_probability']
+        on_cols = ['time', 'rows', 'cols', 'patch_cyclone_probability']
+        sel_cols =['time', 'patch_cyclone_pred_x', 'patch_cyclone_pred_y', 'patch_cyclone_probability']
+        rename_cols = {'patch_cyclone_pred_x':'LAT', 'patch_cyclone_pred_y':'LON', 'patch_cyclone_probability': 'PROB'}
+    else:
+        variables = 'patch_cyclone_pred'
+        on_cols = ['time', 'rows', 'cols']
+        sel_cols =['time', 'patch_cyclone_pred_x', 'patch_cyclone_pred_y']
+        rename_cols = {'patch_cyclone_pred_x':'LAT', 'patch_cyclone_pred_y':'LON'}
     # convert cyclone coordinates to pandas dataframe
-    df = patch_ds["patch_cyclone_pred"].to_dataframe().reset_index()
+    df = patch_ds[variables].to_dataframe().reset_index()
     # merge dataframe to get coordinates
-    detections = pd.merge(
-        left=df[df["coordinate"] == 0],
-        right=df[df["coordinate"] == 1],
-        on=["time", "rows", "cols"],
-    )
+    on_cols
+    detections = pd.merge(left=df[df['coordinate']==0], right=df[df['coordinate']==1], on=on_cols)
     # take only time and coordinates
-    detections = detections[["time", "patch_cyclone_pred_x", "patch_cyclone_pred_y"]]
+    detections = detections[sel_cols]
     # rename coordinates to LAT and LON
-    detections = detections.rename(
-        columns={"patch_cyclone_pred_x": "LAT", "patch_cyclone_pred_y": "LON"}
-    )
+    detections = detections.rename(columns=rename_cols)
     # remove NaN rows
-    detections = detections[
-        ~(np.isnan(detections["LAT"]) & np.isnan(detections["LON"]))
-    ]
+    detections = detections[~(np.isnan(detections['LAT']) & np.isnan(detections['LON']))]
     # convert time axis to datetime
-    detections["time"] = pd.to_datetime(detections["time"].astype(str))
+    detections['time'] = pd.to_datetime(detections['time'].astype(str))
     # convert proj and era5 `time` col to `ISO_TIME`
-    detections = detections.rename(columns={"time": "ISO_TIME"})
+    detections = detections.rename(columns={'time':'ISO_TIME'})
     # add infinite wind speed on each row
-    detections["WS"] = np.inf
+    detections['WS'] = np.inf
     # reset index
     detections = detections.reset_index(drop=True)
     return detections
@@ -426,6 +446,64 @@ class EnsembleModelInference(Inference):
         )
         # get predicted cyclone coordinates
         patch_ds = retrieve_predicted_tc(y_pred, ds, patch_ds, patch_size)
+        # get detections
+        detections = get_detections(patch_ds)
+        return detections
+
+
+class LocClsModelInference(Inference):
+    def __init__(self, model_loc_dir, model_cls_dir, device='cpu') -> None:
+        super().__init__(device)
+        self.model_loc_dir = model_loc_dir
+        self.model_cls_dir = model_cls_dir
+        self.model_loc, self.config_loc, _ = load_trained_model(model_loc_dir, device)
+        self.model_cls, self.config_cls, _ = load_trained_model(model_cls_dir, device)
+        self.scaler_loc, self.drivers_loc, self.targets_loc = self._parse_config_file(self.config_loc)
+        self.scaler_cls, self.drivers_cls, self.targets_cls = self._parse_config_file(self.config_cls)
+
+    def predict(self, 
+                ds: xr.Dataset,          # xarray dataset containing input data
+                patch_size: int = 40,    # dimension of a patch
+                threshold: float = 0.5): # threshold for classification
+        lons = ds['lon'].shape[0]
+        lats = ds['lat'].shape[0]
+        rows = lats // patch_size
+        cols = lons // patch_size
+        time, channels_loc, channels_cls = ds['time'].shape[0], len(self.drivers_loc), len(self.drivers_cls)
+        # divide dataset in patches
+        patch_ds = ds.coarsen({'lat':patch_size, 'lon':patch_size}, boundary="trim").construct({'lon':("cols", "lon_range"), 'lat':("rows", "lat_range")})
+        # get dataloader
+        data_loader_loc = prepare_dataloader(
+            patch_ds = patch_ds, 
+            patch_size = patch_size, 
+            scaler = self.scaler_loc, 
+            drivers = self.drivers_loc, 
+            time = time, rows=rows, cols=cols, 
+            channels = channels_loc, 
+            batch_size = 4096)
+        data_loader_cls = prepare_dataloader(
+            patch_ds = patch_ds, 
+            patch_size = patch_size, 
+            scaler = self.scaler_cls, 
+            drivers = self.drivers_cls, 
+            time = time, rows=rows, cols=cols, 
+            channels = channels_cls, 
+            batch_size = 4096)
+        # predict
+        y_pred_loc = predict_with_models(
+            models = [self.model_loc], data_loader = data_loader_loc, device = self.device
+            )
+        y_pred_cls = predict_with_models_cls(
+            models = [self.model_cls], data_loader = data_loader_cls, device = self.device
+            )
+        # reshape and filter the data
+        y_pred_cls_thr = np.where(y_pred_cls <= threshold, 0.0, 1.0)
+        y_pred_loc[(y_pred_cls_thr == 0)[:,0]] = -1.0
+        y_pred_cls_thr = y_pred_cls_thr.reshape((time, rows, cols, -1))
+        y_pred_cls = y_pred_cls.reshape((time, rows, cols, -1))
+        y_pred_loc = y_pred_loc.reshape((time, rows, cols, 2))
+        # get predicted cyclone coordinates
+        patch_ds = retrieve_predicted_tc(y_pred_loc, ds, patch_ds, patch_size, eps=0.1, y_pred_cls=y_pred_cls)
         # get detections
         detections = get_detections(patch_ds)
         return detections
