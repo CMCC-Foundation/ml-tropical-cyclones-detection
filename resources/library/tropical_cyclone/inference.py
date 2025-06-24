@@ -516,3 +516,134 @@ class LocClsModelInference(Inference):
         # get detections
         detections = get_detections(patch_ds)
         return detections
+
+
+
+class EnsembleLocClsModelInference(Inference):
+    """ Class for the ensemble of models.
+        It expects that all the models share the same drivers and same scaler
+    """
+    def __init__(self, models_loc_dir, models_cls_dir, device='cpu') -> None:
+        super().__init__(device)
+        self.models_loc_dir = models_loc_dir
+        self.models_cls_dir = models_cls_dir
+        self._load_models(models_loc_dir, models_cls_dir, device)
+
+    def _load_models(self, models_loc_dir, models_cls_dir, device):
+        self.models_loc, self.configs_loc, self.scalers_loc, self.drivers_loc, self.targets_loc = [], [], [], [], []
+        self.models_cls, self.configs_cls, self.scalers_cls, self.drivers_cls, self.targets_cls = [], [], [], [], []
+        logging.info(f'Loading models')
+        model_loc_dirs = sorted(glob.glob(os.path.join(models_loc_dir, '*loc*')))
+        model_cls_dirs = sorted(glob.glob(os.path.join(models_cls_dir, '*cls*')))
+        logging.info(f'   found {len(model_loc_dirs)} localization models')
+        logging.info(f'   found {len(model_cls_dirs)} classification models')
+        for model_dir in model_loc_dirs:
+            model, config, _ = load_trained_model(model_dir, device)
+            scaler, drivers, targets = self._parse_config_file(config)
+            self.models_loc.append(model)
+            self.configs_loc.append(config)
+            self.scalers_loc.append(scaler)
+            self.drivers_loc.append(drivers)
+            self.targets_loc.append(targets)
+            logging.info(f'   model {os.path.basename(model_dir)} loaded')
+        for model_dir in model_cls_dirs:
+            model, config, _ = load_trained_model(model_dir, device)
+            scaler, drivers, targets = self._parse_config_file(config)
+            self.models_cls.append(model)
+            self.configs_cls.append(config)
+            self.scalers_cls.append(scaler)
+            self.drivers_cls.append(drivers)
+            self.targets_cls.append(targets)
+            logging.info(f'   model {os.path.basename(model_dir)} loaded')
+        logging.info(f'All models successfully loaded')
+
+    def _retrieve_ensemble_predictions(
+            self, 
+            y_pred_loc: np.ndarray, 
+            y_pred_cls: np.ndarray, 
+            patch_size: int, 
+            n_consensus: int, 
+            threshold: float, 
+            time: int, 
+            rows: int, 
+            cols: int):
+        # round negative coordinates
+        y_pred_loc = np.where(y_pred_loc < 0.0, 0.0, y_pred_loc)
+        # round out-of-bound coordinates
+        y_pred_loc = np.where(y_pred_loc > patch_size-1, patch_size-1, y_pred_loc)
+        # get the mean and standard deviation of all the localizations
+        y_pred_loc_mu, y_pred_loc_std = iqr_localization(y_pred_loc, len(self.models_loc))
+        # set the classification threshold
+        y_pred_cls_thr = np.where(y_pred_cls <= threshold, 0.0, 1.0)
+        # create a vector containing the number of models that predicted a TC for each sample
+        n_tc_pred = np.repeat((y_pred_cls_thr == 1.0).astype(np.int8).min(axis=2).sum(axis=1)[:,np.newaxis], repeats=2, axis=1)
+        # select only predictions where most models agree and round predictions to the nearest integer
+        y_pred_loc = np.where(n_tc_pred >= n_consensus, np.round(y_pred_loc_mu, 2), -1.0)
+        # average classification probs
+        y_pred_cls = np.mean(y_pred_cls_thr, axis = 1)
+        # reshape the data to adapt to patch ds
+        y_pred_cls = y_pred_cls.reshape((time, rows, cols, -1))
+        y_pred_loc = y_pred_loc.reshape((time, rows, cols, 2))
+        y_pred_loc_std = y_pred_loc_std.reshape((time, rows, cols, 2))
+        return y_pred_loc, y_pred_cls, y_pred_loc_std
+    
+    def predict(self, 
+                ds: xr.Dataset,         # xarray dataset containing the input data
+                n_consensus: int,       # number of models that must agree
+                patch_size: int = 40,   # dimension of a patch
+                threshold: float = 0.5, # threshold for classification
+                ):
+        lons = ds['lon'].shape[0]
+        lats = ds['lat'].shape[0]
+        rows = lats // patch_size
+        cols = lons // patch_size
+        time = ds['time'].shape[0]
+        # divide dataset in patches
+        patch_ds = ds.coarsen({'lat':patch_size, 'lon':patch_size}, boundary="trim").construct({'lon':("cols", "lon_range"), 'lat':("rows", "lat_range")})
+        # get dataloader
+        data_loaders_loc = [
+            prepare_dataloader(patch_ds = patch_ds, 
+                               patch_size = patch_size, 
+                               scaler = scalers, 
+                               drivers = drivers, 
+                               time = time, rows=rows, cols=cols, 
+                               channels = len(drivers), 
+                               batch_size = 4096)
+            for drivers, scalers in zip(self.drivers_loc, self.scalers_loc)]
+        data_loaders_cls = [
+            prepare_dataloader(patch_ds = patch_ds, patch_size = patch_size, 
+                               scaler = scalers, 
+                               drivers = drivers, 
+                               time = time, rows=rows, cols=cols, 
+                               channels = len(drivers), 
+                               batch_size = 4096)
+            for drivers, scalers in zip(self.drivers_cls, self.scalers_cls)]
+        # predict with the models
+        y_pred_loc = np.stack([
+            predict_with_models(
+                models = [model], 
+                data_loader = data_loader, 
+                device = self.device)
+            for model, data_loader in zip(self.models_loc, data_loaders_loc)
+            ], axis = 1)
+        y_pred_cls = np.stack([
+            predict_with_models_cls(
+                models = [model], 
+                data_loader = data_loader, 
+                device = self.device) 
+            for model, data_loader in zip(self.models_cls, data_loaders_cls)
+            ], axis = 1)
+        # get the patch ds filled with predicted tc coordinates
+        y_pred_loc, y_pred_cls, y_pred_loc_std = self._retrieve_ensemble_predictions(
+            y_pred_loc = y_pred_loc, 
+            y_pred_cls = y_pred_cls, 
+            patch_size = patch_size, 
+            n_consensus = n_consensus, 
+            threshold = threshold, 
+            time = time, rows = rows, cols = cols
+        )
+        # get predicted cyclone coordinates
+        patch_ds = retrieve_predicted_tc(y_pred = y_pred_loc, ds = ds, patch_ds = patch_ds, patch_size = patch_size, eps = 0.1, y_pred_cls = y_pred_cls, y_pred_loc_std = y_pred_loc_std)
+        # get detections
+        detections = get_detections(patch_ds)
+        return detections
