@@ -7,7 +7,9 @@ experiment = '../experiments'
 train = '../data/patches/train'
 valid = '../data/patches/valid'
 run = '../experiments/model_loc'
-scaler = '../data/patches/scaler_1980_2009.nc'
+[dir.scaler]
+    mean = '../data/datasets/sg_patches/mean_1980_2009.nc'
+    std = '../data/datasets/sg_patches/std_1980_2009.nc'
 
 [mlflow]
 tracking_insecure_tls = 'True'
