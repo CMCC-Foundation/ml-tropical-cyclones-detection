@@ -111,7 +111,8 @@ experiment_dir = config.dir.experiment
 checkpoint = config.dir.checkpoint if hasattr(config.dir, "checkpoint") else None
 train_src = config.dir.train
 valid_src = config.dir.valid
-scaler_src = config.dir.scaler
+mean_src = config.dir.scaler.mean
+std_src = config.dir.scaler.std
 
 # mlflow
 tracking_insecure_tls = config.mlflow.tracking_insecure_tls
@@ -233,7 +234,7 @@ itwinai_logger = ItwinaiLogger(itwinai_logger=_loggers, skip_finalize=True)
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 # load scaler
-scaler = StandardScaler(src=scaler_src, drivers=drivers)
+scaler = StandardScaler(mean_src=mean_src, std_src=std_src, drivers=drivers)
 
 # define user callbacks
 callbacks = [
