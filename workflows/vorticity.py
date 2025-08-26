@@ -73,7 +73,7 @@ def voriticity()
     t3a = exp.newTask(name="Change unit of latitude",
                     operator="oph_apply",
                     arguments={"query": "oph_matheval('oph_double','oph_float',measure,'pi*x/180')"},
-    #                arguments={"query": "oph_matheval(measure,'cos(pi*x/180)')", "measure_type": "auto"}, # Valid for EC-Earth
+    #                arguments={"query": "oph_matheval(measure,'pi*x/180')", "measure_type": "auto"}, # Valid for EC-Earth
                     dependencies={t2:'cube'})
     
     t3b = exp.newTask(name="Evaluate ray factor",
