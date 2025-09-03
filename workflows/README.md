@@ -12,12 +12,7 @@
 
 <ul>
 <li>selects the variables from input NetCDF files related to a given space domain (North Pacific),</li>
-<li>combines the variable to produce the vorticy using the formula:</li>
-
-.. math::
-
-   dv/dx - du/dy
-
+<li>combines the variable to produce the vorticy using the formula: $dv/dx - du/dy$</li>
 <li>regrids the variables to a common grid,</li>
 <li>save psl and vorticity in the same output file.</li>
 </ul>
