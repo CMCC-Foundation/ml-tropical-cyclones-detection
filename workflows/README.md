@@ -1,5 +1,3 @@
-<script src='https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/MathJax.js?config=TeX-MML-AM_CHTML' async></script>
-
 # Workflows for Tropical Cyclones Detection
 
 <p align="justify"> This repository includes a workflow useful to test tropical cyclone detection. </p>
