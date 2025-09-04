@@ -3,7 +3,7 @@
 ## Overview
 The repository provides a Machine Learning (ML) library to setup training and validation of a Tropical Cyclones (TCs) Detection model. ERA5 reanalysis and the International Best Track Archive for Climate Stewardship (IBTrACS) data are used as input and the target, respectively. Input-Output data pairs are provided as Zarr data stores.
 
-Input drivers:
+The model can use the following input drivers:
 - 10m wind gust [ $\frac{m}{s}$]
 - 10m wind gust since previous post-processing [ $\frac{m}{s}$]
 - mean sea level pressure [Pa]
@@ -12,7 +12,9 @@ Input drivers:
 - temperature at 500 mb [K]
 
 Target:
-- TC center row-column coordinates within the 40 x 40 pixels patch 
+- TC center row-column coordinates within the 40 x 40 pixels patch
+
+While all these drivers can be employed, in practice it is sufficient to use relative vorticity at 850 mb [ $s^{-1}$] and mean sea level pressure [Pa], with which the model still performs well.
 
 ## Code Structure
 
