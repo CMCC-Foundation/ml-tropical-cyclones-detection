@@ -405,7 +405,8 @@
           "task": "Evaluate vorticity"
         }
       ],
-      "extra": {}
+      "extra": {},
+      "on_error": "skip"
     },
     {
       "type": "ophidia",

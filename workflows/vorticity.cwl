@@ -315,6 +315,8 @@ steps:
       variable: output_variable2
       metadata_key:
         default: "comment"
+      on_error:
+        default: "skip"
     out: [experiment]
   Update_metadata:
     run: tasks/metadata.cwl

@@ -172,6 +172,7 @@ def voriticity()
     t6 = exp.newTask(name="Delete metadata",
                     operator="oph_metadata", 
                     arguments={ "mode": "delete", "variable": output_variable2, "metadata_key": "comment" },
+                    on_error="skip",
                     dependencies={t5:'cube'})
     
     t7 = exp.newTask(name="Update metadata",
