@@ -84,14 +84,14 @@ steps:
       query:
         default: "oph_matheval('oph_double','oph_float',measure,'pi*x/180')"
     out: [experiment]
-  Evaluate_ray_factor:
+  Evaluate_radius_factor:
     run: tasks/apply.cwl
     in:
       experiment: Change_unit_of_latitude/experiment
       name:
-        default: "Evaluate ray factor"
+        default: "Evaluate radius factor"
       query:
-        default: "oph_matheval(measure,'6378137*6356702/sqrt((6378137*sin(x))^2+(6356702*cos(x))^2)*pi/180')"
+        default: "oph_matheval(measure,'sqrt(((6378137^2*cos(x))^2+(6356752^2*sin(x))^2)/((6378137*cos(x))^2+(6356752*sin(x))^2))*pi/180')"
       measure_type:
         default: "auto"
     out: [experiment]
@@ -102,7 +102,7 @@ steps:
       name:
         default: "Evaluate latitude factor"
       query:
-        default: "oph_matheval(measure,'6378137*6356702/sqrt((6378137*tan(x))^2+(6356702)^2)*pi/180')"
+        default: "oph_matheval(measure,'sqrt(((6378137^2*cos(x))^2+(6356752^2*sin(x))^2)/((6378137*cos(x))^2+(6356752*sin(x))^2))*pi/180*cos(x)')"
       measure_type:
         default: "auto"
     out: [experiment]
@@ -199,13 +199,13 @@ steps:
       nfrag: nthreads
       nthreads: nthreads
     out: [experiment]
-  Put_ray_factor:
+  Put_radius_factor:
     run: tasks/intercube.cwl
     in:
       experiment1: Import_U/experiment
-      experiment2: Evaluate_ray_factor/experiment
+      experiment2: Evaluate_radius_factor/experiment
       name:
-        default: "Put ray factor"
+        default: "Put radius factor"
       operation:
         default: "div"
       cube2_is_array:
@@ -214,7 +214,7 @@ steps:
   Evaluate_du_dlat:
     run: tasks/apply.cwl
     in:
-      experiment: Put_ray_factor/experiment
+      experiment: Put_radius_factor/experiment
       name:
         default: "Evaluate du/dlat"
       query:

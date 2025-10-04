@@ -10,7 +10,7 @@
       "operator": "oph_script",
       "arguments": [
         "script=/home/jovyan/work/vorticity/linkinput.sh",
-        "args=1 *_201*.nc"
+        "args=120 *_202*.nc"
       ],
       "dependencies": [],
       "extra": {}
@@ -69,10 +69,10 @@
     },
     {
       "type": "ophidia",
-      "name": "Evaluate ray factor",
+      "name": "Evaluate radius factor",
       "operator": "oph_apply",
       "arguments": [
-        "query=oph_matheval(measure,'6378137*6356702/sqrt((6378137*sin(x))^2+(6356702*cos(x))^2)*pi/180')",
+        "query=oph_matheval(measure,'sqrt(((6378137^2*cos(x))^2+(6356752^2*sin(x))^2)/((6378137*cos(x))^2+(6356752*sin(x))^2))*pi/180')",
         "measure_type=auto"
       ],
       "dependencies": [
@@ -88,7 +88,7 @@
       "name": "Evaluate latitude factor",
       "operator": "oph_apply",
       "arguments": [
-        "query=oph_matheval(measure,'6378137*6356702/sqrt((6378137*tan(x))^2+(6356702)^2)*pi/180')",
+        "query=oph_matheval(measure,'sqrt(((6378137^2*cos(x))^2+(6356752^2*sin(x))^2)/((6378137*cos(x))^2+(6356752*sin(x))^2))*pi/180*cos(x)')",
         "measure_type=auto"
       ],
       "dependencies": [
@@ -143,7 +143,8 @@
         "nfrag=1",
         "subset_dims=lat|lon",
         "subset_filter=0:70|100:320",
-        "subset_type=coord"
+        "subset_type=coord",
+        "description=Original input psl_@{source_file+3}"
       ],
       "dependencies": [
         {
@@ -157,7 +158,8 @@
       "name": "Rename measure",
       "operator": "oph_apply",
       "arguments": [
-        "measure=msl"
+        "measure=msl",
+        "description=Original input psl_@{source_file+3}"
       ],
       "dependencies": [
         {
@@ -172,7 +174,8 @@
       "name": "Export PSL",
       "operator": "oph_exportnc2",
       "arguments": [
-        "output=/home/jovyan/work/vorticity/output/psl_@{source_file+3}"
+        "output=/home/jovyan/work/vorticity/output/psl_@{source_file+3}",
+        "description=Original input psl_@{source_file+3}"
       ],
       "dependencies": [
         {
@@ -189,7 +192,8 @@
       "arguments": [
         "command=/home/jovyan/work/vorticity/regrid.sh",
         "output=/home/jovyan/work/vorticity/output/regridded_psl_@{source_file+3}",
-        "args=0:70 100:320 r880x280"
+        "args=0:70 100:320 r880x280",
+        "description=Original input psl_@{source_file+3}"
       ],
       "dependencies": [
         {
@@ -211,7 +215,8 @@
         "nfrag=1",
         "subset_dims=plev|lat|lon",
         "subset_filter=85000|0:70|100:320",
-        "subset_type=coord"
+        "subset_type=coord",
+        "description=Original input ua_@{source_file+3}"
       ],
       "dependencies": [
         {
@@ -222,11 +227,12 @@
     },
     {
       "type": "ophidia",
-      "name": "Put ray factor",
+      "name": "Put radius factor",
       "operator": "oph_intercube",
       "arguments": [
         "operation=div",
-        "cube2_is_array=yes"
+        "cube2_is_array=yes",
+        "description=Original input ua_@{source_file+3}"
       ],
       "dependencies": [
         {
@@ -235,7 +241,7 @@
         },
         {
           "argument": "cube2",
-          "task": "Evaluate ray factor"
+          "task": "Evaluate radius factor"
         }
       ],
       "extra": {}
@@ -246,12 +252,13 @@
       "operator": "oph_apply",
       "arguments": [
         "query=oph_gsl_spline(measure,dimension,dimension,1)",
-        "measure_type=auto"
+        "measure_type=auto",
+        "description=Original input ua_@{source_file+3}"
       ],
       "dependencies": [
         {
           "argument": "cube",
-          "task": "Put ray factor"
+          "task": "Put radius factor"
         }
       ],
       "extra": {}
@@ -260,7 +267,9 @@
       "type": "ophidia",
       "name": "Rollup U",
       "operator": "oph_rollup",
-      "arguments": [],
+      "arguments": [
+        "description=Original input ua_@{source_file+3}"
+      ],
       "dependencies": [
         {
           "argument": "cube",
@@ -274,7 +283,8 @@
       "name": "Permute U",
       "operator": "oph_permute",
       "arguments": [
-        "dim_pos=2,1"
+        "dim_pos=2,1",
+        "description=Original input ua_@{source_file+3}"
       ],
       "dependencies": [
         {
@@ -296,7 +306,8 @@
         "nfrag=1",
         "subset_dims=plev|lat|lon",
         "subset_filter=85000|0:70|100:320",
-        "subset_type=coord"
+        "subset_type=coord",
+        "description=Original input va_@{source_file+3}"
       ],
       "dependencies": [
         {
@@ -311,7 +322,8 @@
       "operator": "oph_apply",
       "arguments": [
         "query=oph_gsl_spline(measure,dimension,dimension,1)",
-        "measure_type=auto"
+        "measure_type=auto",
+        "description=Original input va_@{source_file+3}"
       ],
       "dependencies": [
         {
@@ -325,7 +337,9 @@
       "type": "ophidia",
       "name": "Rollup V",
       "operator": "oph_rollup",
-      "arguments": [],
+      "arguments": [
+        "description=Original input va_@{source_file+3}"
+      ],
       "dependencies": [
         {
           "argument": "cube",
@@ -341,7 +355,8 @@
       "arguments": [
         "operation=div",
         "cube2_is_array=yes",
-        "extension_type=interlace"
+        "extension_type=interlace",
+        "description=Original input va_@{source_file+3}"
       ],
       "dependencies": [
         {
@@ -360,7 +375,8 @@
       "name": "Evaluate vorticity",
       "operator": "oph_intercube",
       "arguments": [
-        "measure=vo_850"
+        "measure=vo_850",
+        "description=Original inputs ua_@{source_file+3} and va_@{source_file+3}"
       ],
       "dependencies": [
         {
@@ -415,7 +431,8 @@
       "name": "Export VO",
       "operator": "oph_exportnc2",
       "arguments": [
-        "output=/home/jovyan/work/vorticity/output/vo_@{source_file+3}"
+        "output=/home/jovyan/work/vorticity/output/vo_@{source_file+3}",
+        "description=Original inputs ua_@{source_file+3} and va_@{source_file+3}"
       ],
       "dependencies": [
         {
@@ -432,7 +449,8 @@
       "arguments": [
         "command=/home/jovyan/work/vorticity/regrid.sh",
         "output=/home/jovyan/work/vorticity/output/regridded_vo_@{source_file+3}",
-        "args=0:70 100:320 r880x280"
+        "args=0:70 100:320 r880x280",
+        "description=Original inputs ua_@{source_file+3} and va_@{source_file+3}"
       ],
       "dependencies": [
         {
@@ -449,7 +467,8 @@
       "arguments": [
         "command=/home/jovyan/work/vorticity/merge.sh",
         "output=/home/jovyan/work/vorticity/output/both_@{source_file+3}",
-        "args=msl"
+        "args=msl",
+        "description=Original inputs ua_@{source_file+3} and va_@{source_file+3}"
       ],
       "dependencies": [
         {

@@ -37,9 +37,9 @@ def voriticity()
     core_limit = "20"
     time_part1 = lon_file.index(lon_file.split("_")[-1]) - 2
     time_part2 = time_part1 + 13
-    eq_ray = "6378137" # m
-    pol_ray = "6356702" # m
-    q_ray = "6372797" # m
+    eq_radius = "6378137" # m
+    pol_radius = "6356752" # m
+    q_radius = "6372797" # m
     
     cli = Client(read_env = True)
     Cube.setclient(cli)
@@ -76,14 +76,14 @@ def voriticity()
     #                arguments={"query": "oph_matheval(measure,'pi*x/180')", "measure_type": "auto"}, # Valid for EC-Earth
                     dependencies={t2:'cube'})
     
-    t3b = exp.newTask(name="Evaluate ray factor",
+    t3b = exp.newTask(name="Evaluate radius factor",
                     operator="oph_apply",
-                    arguments={"query": "oph_matheval(measure,'"+eq_ray+"*"+pol_ray+"/sqrt(("+eq_ray+"*sin(x))^2+("+pol_ray+"*cos(x))^2)*pi/180')", "measure_type": "auto"},
+                    arguments={"query": "oph_matheval(measure,'sqrt((("+eq_radius+"^2*cos(x))^2+("+pol_radius+"^2*sin(x))^2)/(("+eq_radius+"*cos(x))^2+("+pol_radius+"*sin(x))^2))*pi/180')", "measure_type": "auto"},
                     dependencies={t3a:'cube'})
     
     t3c = exp.newTask(name="Evaluate latitude factor",
                     operator="oph_apply",
-                    arguments={"query": "oph_matheval(measure,'"+eq_ray+"*"+pol_ray+"/sqrt(("+eq_ray+"*tan(x))^2+("+pol_ray+")^2)*pi/180')", "measure_type": "auto"},
+                    arguments={"query": "oph_matheval(measure,'sqrt((("+eq_radius+"^2*cos(x))^2+("+pol_radius+"^2*sin(x))^2)/(("+eq_radius+"*cos(x))^2+("+pol_radius+"*sin(x))^2))*pi/180*cos(x)')", "measure_type": "auto"},
                     dependencies={t3a:'cube'})
     
     t4 = exp.newTask(name="Iterate on time",
@@ -124,7 +124,7 @@ def voriticity()
                     arguments={"imp_dim": "lat", "measure": "ua", "input": input_folder + "/ua_@{source_file+3}", "container": container + "_&{source}", "nfrag": threads, "subset_dims": plev_name + "|lat|lon", "subset_filter": "85000|" + lat_range + "|" + lon_range, "subset_type": "coord"},
                     dependencies={tcc:''})
     
-    tu1b = exp.newTask(name="Put ray factor",
+    tu1b = exp.newTask(name="Put radius factor",
                     operator="oph_intercube", 
                     arguments={ "operation": "div", "cube2_is_array": "yes" },
                     dependencies={tu1:'cube', t3b:'cube2'})
