@@ -83,21 +83,27 @@ def load_model_from_mlflow_registry(model_name, version=1, tag=None):
 def load_model_from_mlflow(run_name, scaler=True, provenance=False):
     # set tracking uri
     mlflow.set_tracking_uri(os.getenv('MLFLOW_TRACKING_URI'))
-
-    run_id = mlflow.search_runs(filter_string=f"run_name='{run_name}'")['run_id'].values[0]
-
     local_path = os.path.join(os.getcwd(), 'MLFLOW', f"{run_name}")
     os.makedirs(local_path, exist_ok=True)
     print(f"Data from MLFlow downloaded in: {local_path}")
 
-    client = mlflow.MlflowClient()
-    if scaler:
-        artifact_path = client.download_artifacts(run_id=run_id, path="scaler", dst_path=local_path)
-    if provenance:
-        artifact_path = client.download_artifacts(run_id=run_id, path=f"provgraph_{os.getenv('MLFLOW_EXPERIMENT_NAME')}.svg", dst_path=local_path)
-        artifact_path = client.download_artifacts(run_id=run_id, path=f"provgraph_{os.getenv('MLFLOW_EXPERIMENT_NAME')}.json", dst_path=local_path)
-
-    model_uri = f'runs:/{run_id}/last_model'
-    model = mlflow.pytorch.load_model(model_uri, map_location=torch.device(check_backend()), dst_path=local_path)
+    #Check if model has already been downloaded
+    model_file = os.path.join(local_path, 'last_model/data/model.pth')
+	
+    if not os.path.isfile(model_file):
+        print(f"Data from MLFlow downloaded in: {local_path}")
+        run_id = mlflow.search_runs(filter_string=f"run_name='{run_name}'")['run_id'].values[0]
+        client = mlflow.MlflowClient()
+        if scaler:
+            artifact_path = client.download_artifacts(run_id=run_id, path="scaler", dst_path=local_path)
+        if provenance:
+            artifact_path = client.download_artifacts(run_id=run_id, path=f"provgraph_{os.getenv('MLFLOW_EXPERIMENT_NAME')}.svg", dst_path=local_path)
+            artifact_path = client.download_artifacts(run_id=run_id, path=f"provgraph_{os.getenv('MLFLOW_EXPERIMENT_NAME')}.json", dst_path=local_path)
+        model_uri = f'runs:/{run_id}/last_model'
+        model = mlflow.pytorch.load_model(model_uri, map_location=torch.device(check_backend()), dst_path=local_path)
+    else:
+        print(f"Retrieving local model from: {local_path}")
+        os.makedirs(local_path+"/tmp", exist_ok=True)
+        model = mlflow.pytorch.load_model(local_path+"/last_model", map_location=torch.device(check_backend()), dst_path=local_path+"/tmp")
 
     return model, local_path
