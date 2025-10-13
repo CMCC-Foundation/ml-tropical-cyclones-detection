@@ -267,6 +267,45 @@ class Inference:
             drivers=drivers)
         return scaler, drivers, targets
 
+    def load_cmip_dataset_rucio(self, climate_model, scope, dataset, ruciorse, start_year=None, end_year=None):
+        from rucio.client.client import Client
+        rucio = Client()
+
+        cmip6_filename = []
+        replicas = rucio.list_replicas(
+            dids=[{"scope": scope, "name": dataset}],
+            schemes=["file"],
+            rse_expression=ruciorse
+        )
+
+        # find replicas at the chosen RSE
+        paths = []
+        for replica in replicas:
+            if climate_model.value in replica["name"] and ruciorse in replica["rses"]:
+                lfilepath=replica["rses"][ruciorse][0]
+                filepath = lfilepath.replace('file://localhost', '')
+                paths.append(filepath)
+
+        start_sel = np.datetime64(f"{start_year}-01-01")
+        end_sel = np.datetime64(f"{end_year}-12-31")
+        cmip6_filenames = []
+        for p in sorted(paths):
+            fn = os.path.basename(p)
+            datestr = fn.rsplit("_", 1)[-1].removesuffix(".nc")
+            start_s, end_s = datestr.split("-")
+            start = np.datetime64(f"{start_s[:4]}-{start_s[4:6]}-{start_s[6:8]}")
+            end   = np.datetime64(f"{end_s[:4]}-{end_s[4:6]}-{end_s[6:8]}")
+            if (start >= start_sel) and (start < end_sel):
+                cmip6_filenames.append(p)
+
+        ds = xr.open_mfdataset(cmip6_filenames)
+        logging.info(f"Dataset opened")
+        if ds is None:
+            logging.info(f"No dataset found")
+            return None
+        dates = pd.to_datetime(ds["time"].astype(str))
+        return ds, dates
+    
     def load_dataset(self, dataset_dir, year=None, month=None):
         if year is not None:
             y = year
