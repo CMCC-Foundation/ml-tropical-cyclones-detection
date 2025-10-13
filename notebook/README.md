@@ -1,6 +1,6 @@
-Notebook 1 – inference_noteook.ipynb
+### Notebook 1 – inference_noteook.ipynb
 
-This notebook is designed to perform inference using the trained model for TCs detection and to apply a tracking algorithm to identify the trajectories of the detected systems.  
+This notebook is designed to perform inference using the trained model for TCs detection and to apply a tracking algorithm to identify the trajectories of the detected systems. It can be used both on historical and projection data.
 
 Workflow  
 
@@ -39,7 +39,7 @@ Output
 - Tracked storm paths  
 - Performance merìtics (POD, FAR; track durations)
 
-Notebook 2 - results_analysis.ipynb
+### Notebook 2 - results_analysis.ipynb
 
 This notebook is designed to analyze the performance of the trained model for TCs detection and tracking.  
 It compares the model outputs against the IBTrACS reference dataset, computing localization errors, classification metrics, and track matching statistics.  
