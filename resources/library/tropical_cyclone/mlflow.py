@@ -95,7 +95,8 @@ def load_model_from_mlflow(run_name, scaler=True, provenance=False):
         run_id = mlflow.search_runs(filter_string=f"run_name='{run_name}'")['run_id'].values[0]
         client = mlflow.MlflowClient()
         if scaler:
-            artifact_path = client.download_artifacts(run_id=run_id, path="scaler", dst_path=local_path)
+            artifact_path = client.download_artifacts(run_id=run_id, path="scaler_mean", dst_path=local_path)
+            artifact_path = client.download_artifacts(run_id=run_id, path="scaler_std", dst_path=local_path)
         if provenance:
             artifact_path = client.download_artifacts(run_id=run_id, path=f"provgraph_{os.getenv('MLFLOW_EXPERIMENT_NAME')}.svg", dst_path=local_path)
             artifact_path = client.download_artifacts(run_id=run_id, path=f"provgraph_{os.getenv('MLFLOW_EXPERIMENT_NAME')}.json", dst_path=local_path)

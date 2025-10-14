@@ -527,8 +527,13 @@ with trainer.logger.itwinai_logger.start_logging(rank=trainer.global_rank):
 
     # log scaler
     trainer.logger.itwinai_logger.log(
-        item=scaler_src,
-        identifier="scaler",
+        item=mean_src,
+        identifier="scaler_mean",
+        kind='artifact'
+    )
+    trainer.logger.itwinai_logger.log(
+        item=std_src,
+        identifier="scaler_std",
         kind='artifact'
     )
 
