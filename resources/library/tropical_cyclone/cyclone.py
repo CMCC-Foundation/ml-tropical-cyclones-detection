@@ -626,7 +626,7 @@ def track_matching(
     return match_df
 
 def compute_pod_and_far(dynamicopy, algo, algo_id, obs, max_dist, print_results=False):
-    matches = dynamicopy.match_tracks(algo, obs, algo_id, 'ibtracs', max_dist=max_dist, min_overlap=0, ref=True)
+    matches = dynamicopy.tc.match_tracks(algo, obs, algo_id, 'ibtracs', max_dist=max_dist, min_overlap=0, ref=True)
     
     n_gt_match = len(matches[f'id_ibtracs'].unique())
     n_algo_match = len(matches[f'id_{algo_id}'].unique())

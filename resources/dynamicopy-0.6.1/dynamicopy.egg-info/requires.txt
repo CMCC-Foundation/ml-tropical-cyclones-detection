@@ -1,8 +1,0 @@
-numpy
-scipy
-seaborn
-matplotlib
-netCDF4
-xarray
-shapely
-sklearn

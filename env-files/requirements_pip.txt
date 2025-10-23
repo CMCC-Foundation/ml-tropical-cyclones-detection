@@ -45,6 +45,7 @@ dill @ file:///work/ci_py311/dill_1676827712960/work
 distlib @ file:///home/conda/feedstock_root/build_artifacts/distlib_1689598491484/work
 distributed @ file:///home/conda/feedstock_root/build_artifacts/distributed_1718922226295/work
 dulwich @ file:///croot/dulwich_1679420040193/work
+dynamicopy==0.6.6
 einops==0.8.0
 einops-exts==0.0.4
 ema-pytorch==0.4.8
