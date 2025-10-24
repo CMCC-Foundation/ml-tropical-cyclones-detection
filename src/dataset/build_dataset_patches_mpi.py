@@ -11,9 +11,22 @@ import numpy as np
 import logging
 import os
 import sys
+import argparse
+import toml
 
 sys.path.append("../../resources/library")
 import tropical_cyclone as tc
+
+parser = argparse.ArgumentParser()
+parser.add_argument('config', type=str, help="Path of configuration file")
+args = parser.parse_args()
+
+config_file = args.config
+if os.path.exists(config_file):
+    config = toml.load(config_file)
+else:
+    print("Configuration file not found")
+    sys.exit()    
 
 
 # initialize MPI
@@ -37,16 +50,17 @@ dst_train_data_dir = os.path.join(data_dir, "patches", "train")
 dst_valid_data_dir = os.path.join(data_dir, "patches", "valid")
 dst_test_data_dir = os.path.join(data_dir, "patches", "test")
 georef_src = os.path.join(data_dir, "ibtracs", "georef.csv")
-patch_vars = [
-    "fg10",
-    "i10fg",
-    "msl",
-    "sst",
-    "t_500",
-    "t_300",
-    "vo_850",
-    "density_map_tc",
-]
+patch_vars = config["data"]["drivers"]
+#[
+#    "fg10",
+#    "i10fg",
+#    "msl",
+#    "sst",
+#    "t_500",
+#    "t_300",
+#    "vo_850",
+#    "density_map_tc",
+#]
 coo_vars = ["real_cyclone", "rounded_cyclone", "global_cyclone", "patch_cyclone"]
 log_dir = "logs"
 
