@@ -1,0 +1,535 @@
+{
+  "name": "Vorticity",
+  "author": "CMCC",
+  "abstract": "This workflow evaluate the wind vorticity dv/dlon - du/dlat given the wind components u and v using PyOphidia",
+  "exec_mode": "sync",
+  "tasks": [
+    {
+      "type": "ophidia",
+      "name": "Initialization",
+      "operator": "oph_script",
+      "arguments": [
+        "script=/home/jovyan/work/vorticity/linkinput.sh",
+        "args=120 *_202*.nc"
+      ],
+      "dependencies": [],
+      "extra": {}
+    },
+    {
+      "type": "ophidia",
+      "name": "Create a work container",
+      "operator": "oph_createcontainer",
+      "arguments": [
+        "container=wind",
+        "dim=time|plev|lat|lon"
+      ],
+      "dependencies": [
+        {
+          "task": "Initialization"
+        }
+      ],
+      "extra": {},
+      "on_error": "skip"
+    },
+    {
+      "type": "ophidia",
+      "name": "Get latitude",
+      "operator": "oph_importnc2",
+      "arguments": [
+        "imp_dim=lat",
+        "measure=lat",
+        "input=/home/jovyan/data/CMIP6/HighResMIP/CMCC/CMCC-CM2-VHR4/highres-future/r1i1p1f1/6hrPlevPt/psl/gn/v20190509/psl_6hrPlevPt_CMCC-CM2-VHR4_highres-future_r1i1p1f1_gn_201501010000-201501311800.nc",
+        "container=wind",
+        "nfrag=1",
+        "subset_dims=lat",
+        "subset_filter=0:70",
+        "subset_type=coord"
+      ],
+      "dependencies": [
+        {
+          "task": "Create a work container"
+        }
+      ],
+      "extra": {}
+    },
+    {
+      "type": "ophidia",
+      "name": "Change unit of latitude",
+      "operator": "oph_apply",
+      "arguments": [
+        "query=oph_matheval('oph_double','oph_float',measure,'pi*x/180')"
+      ],
+      "dependencies": [
+        {
+          "argument": "cube",
+          "task": "Get latitude"
+        }
+      ],
+      "extra": {}
+    },
+    {
+      "type": "ophidia",
+      "name": "Evaluate radius factor",
+      "operator": "oph_apply",
+      "arguments": [
+        "query=oph_matheval(measure,'sqrt(((6378137^2*cos(x))^2+(6356752^2*sin(x))^2)/((6378137*cos(x))^2+(6356752*sin(x))^2))*pi/180')",
+        "measure_type=auto"
+      ],
+      "dependencies": [
+        {
+          "argument": "cube",
+          "task": "Change unit of latitude"
+        }
+      ],
+      "extra": {}
+    },
+    {
+      "type": "ophidia",
+      "name": "Evaluate latitude factor",
+      "operator": "oph_apply",
+      "arguments": [
+        "query=oph_matheval(measure,'sqrt(((6378137^2*cos(x))^2+(6356752^2*sin(x))^2)/((6378137*cos(x))^2+(6356752*sin(x))^2))*pi/180*cos(x)')",
+        "measure_type=auto"
+      ],
+      "dependencies": [
+        {
+          "argument": "cube",
+          "task": "Change unit of latitude"
+        }
+      ],
+      "extra": {}
+    },
+    {
+      "type": "ophidia",
+      "name": "Iterate on time",
+      "operator": "oph_for",
+      "arguments": [
+        "parallel=yes",
+        "key=source",
+        "input=[/home/jovyan/work/vorticity/input/ua_*.nc]"
+      ],
+      "dependencies": [
+        {
+          "task": "Initialization"
+        }
+      ],
+      "extra": {}
+    },
+    {
+      "type": "ophidia",
+      "name": "Create a temporary container",
+      "operator": "oph_createcontainer",
+      "arguments": [
+        "container=wind_&{source}",
+        "dim=time|plev|lat|lon"
+      ],
+      "dependencies": [
+        {
+          "task": "Iterate on time"
+        }
+      ],
+      "extra": {},
+      "on_error": "skip"
+    },
+    {
+      "type": "ophidia",
+      "name": "Import PSL",
+      "operator": "oph_importnc2",
+      "arguments": [
+        "imp_dim=lat",
+        "measure=psl",
+        "input=/home/jovyan/work/vorticity/input/psl_@{source_file+3}",
+        "container=wind_&{source}",
+        "nfrag=1",
+        "subset_dims=lat|lon",
+        "subset_filter=0:70|100:320",
+        "subset_type=coord",
+        "description=Original input psl_@{source_file+3}"
+      ],
+      "dependencies": [
+        {
+          "task": "Create a temporary container"
+        }
+      ],
+      "extra": {}
+    },
+    {
+      "type": "ophidia",
+      "name": "Rename measure",
+      "operator": "oph_apply",
+      "arguments": [
+        "measure=msl",
+        "description=Original input psl_@{source_file+3}"
+      ],
+      "dependencies": [
+        {
+          "argument": "cube",
+          "task": "Import PSL"
+        }
+      ],
+      "extra": {}
+    },
+    {
+      "type": "ophidia",
+      "name": "Export PSL",
+      "operator": "oph_exportnc2",
+      "arguments": [
+        "output=/home/jovyan/work/vorticity/output/psl_@{source_file+3}",
+        "description=Original input psl_@{source_file+3}"
+      ],
+      "dependencies": [
+        {
+          "argument": "cube",
+          "task": "Rename measure"
+        }
+      ],
+      "extra": {}
+    },
+    {
+      "type": "ophidia",
+      "name": "Regrid PSL",
+      "operator": "oph_generic",
+      "arguments": [
+        "command=/home/jovyan/work/vorticity/regrid.sh",
+        "output=/home/jovyan/work/vorticity/output/regridded_psl_@{source_file+3}",
+        "args=0:70 100:320 r880x280",
+        "description=Original input psl_@{source_file+3}"
+      ],
+      "dependencies": [
+        {
+          "argument": "input",
+          "task": "Export PSL"
+        }
+      ],
+      "extra": {}
+    },
+    {
+      "type": "ophidia",
+      "name": "Import U",
+      "operator": "oph_importnc2",
+      "arguments": [
+        "imp_dim=lat",
+        "measure=ua",
+        "input=/home/jovyan/work/vorticity/input/ua_@{source_file+3}",
+        "container=wind_&{source}",
+        "nfrag=1",
+        "subset_dims=plev|lat|lon",
+        "subset_filter=85000|0:70|100:320",
+        "subset_type=coord",
+        "description=Original input ua_@{source_file+3}"
+      ],
+      "dependencies": [
+        {
+          "task": "Create a temporary container"
+        }
+      ],
+      "extra": {}
+    },
+    {
+      "type": "ophidia",
+      "name": "Put radius factor",
+      "operator": "oph_intercube",
+      "arguments": [
+        "operation=div",
+        "cube2_is_array=yes",
+        "description=Original input ua_@{source_file+3}"
+      ],
+      "dependencies": [
+        {
+          "argument": "cube",
+          "task": "Import U"
+        },
+        {
+          "argument": "cube2",
+          "task": "Evaluate radius factor"
+        }
+      ],
+      "extra": {}
+    },
+    {
+      "type": "ophidia",
+      "name": "Evaluate du/dlat",
+      "operator": "oph_apply",
+      "arguments": [
+        "query=oph_gsl_spline(measure,dimension,dimension,1)",
+        "measure_type=auto",
+        "description=Original input ua_@{source_file+3}"
+      ],
+      "dependencies": [
+        {
+          "argument": "cube",
+          "task": "Put radius factor"
+        }
+      ],
+      "extra": {}
+    },
+    {
+      "type": "ophidia",
+      "name": "Rollup U",
+      "operator": "oph_rollup",
+      "arguments": [
+        "description=Original input ua_@{source_file+3}"
+      ],
+      "dependencies": [
+        {
+          "argument": "cube",
+          "task": "Evaluate du/dlat"
+        }
+      ],
+      "extra": {}
+    },
+    {
+      "type": "ophidia",
+      "name": "Permute U",
+      "operator": "oph_permute",
+      "arguments": [
+        "dim_pos=2,1",
+        "description=Original input ua_@{source_file+3}"
+      ],
+      "dependencies": [
+        {
+          "argument": "cube",
+          "task": "Rollup U"
+        }
+      ],
+      "extra": {}
+    },
+    {
+      "type": "ophidia",
+      "name": "Import V",
+      "operator": "oph_importnc2",
+      "arguments": [
+        "imp_dim=lon",
+        "measure=va",
+        "input=/home/jovyan/work/vorticity/input/va_@{source_file+3}",
+        "container=wind_&{source}",
+        "nfrag=1",
+        "subset_dims=plev|lat|lon",
+        "subset_filter=85000|0:70|100:320",
+        "subset_type=coord",
+        "description=Original input va_@{source_file+3}"
+      ],
+      "dependencies": [
+        {
+          "task": "Create a temporary container"
+        }
+      ],
+      "extra": {}
+    },
+    {
+      "type": "ophidia",
+      "name": "Evaluate dv/dlon",
+      "operator": "oph_apply",
+      "arguments": [
+        "query=oph_gsl_spline(measure,dimension,dimension,1)",
+        "measure_type=auto",
+        "description=Original input va_@{source_file+3}"
+      ],
+      "dependencies": [
+        {
+          "argument": "cube",
+          "task": "Import V"
+        }
+      ],
+      "extra": {}
+    },
+    {
+      "type": "ophidia",
+      "name": "Rollup V",
+      "operator": "oph_rollup",
+      "arguments": [
+        "description=Original input va_@{source_file+3}"
+      ],
+      "dependencies": [
+        {
+          "argument": "cube",
+          "task": "Evaluate dv/dlon"
+        }
+      ],
+      "extra": {}
+    },
+    {
+      "type": "ophidia",
+      "name": "Put latitude factor",
+      "operator": "oph_intercube",
+      "arguments": [
+        "operation=div",
+        "cube2_is_array=yes",
+        "extension_type=interlace",
+        "description=Original input va_@{source_file+3}"
+      ],
+      "dependencies": [
+        {
+          "argument": "cube",
+          "task": "Rollup V"
+        },
+        {
+          "argument": "cube2",
+          "task": "Evaluate latitude factor"
+        }
+      ],
+      "extra": {}
+    },
+    {
+      "type": "ophidia",
+      "name": "Evaluate vorticity",
+      "operator": "oph_intercube",
+      "arguments": [
+        "measure=vo_850",
+        "description=Original inputs ua_@{source_file+3} and va_@{source_file+3}"
+      ],
+      "dependencies": [
+        {
+          "argument": "cube",
+          "task": "Put latitude factor"
+        },
+        {
+          "argument": "cube2",
+          "task": "Permute U"
+        }
+      ],
+      "extra": {}
+    },
+    {
+      "type": "ophidia",
+      "name": "Delete metadata",
+      "operator": "oph_metadata",
+      "arguments": [
+        "mode=delete",
+        "variable=vo_850",
+        "metadata_key=comment"
+      ],
+      "dependencies": [
+        {
+          "argument": "cube",
+          "task": "Evaluate vorticity"
+        }
+      ],
+      "extra": {},
+      "on_error": "skip"
+    },
+    {
+      "type": "ophidia",
+      "name": "Update metadata",
+      "operator": "oph_metadata",
+      "arguments": [
+        "mode=update",
+        "variable=vo_850",
+        "metadata_key=standard_name|long_name|units",
+        "metadata_value=atmosphere_relative_vorticity|Vorticity (relative)|s**-1",
+        "force=yes"
+      ],
+      "dependencies": [
+        {
+          "argument": "cube",
+          "task": "Delete metadata"
+        }
+      ],
+      "extra": {}
+    },
+    {
+      "type": "ophidia",
+      "name": "Export VO",
+      "operator": "oph_exportnc2",
+      "arguments": [
+        "output=/home/jovyan/work/vorticity/output/vo_@{source_file+3}",
+        "description=Original inputs ua_@{source_file+3} and va_@{source_file+3}"
+      ],
+      "dependencies": [
+        {
+          "argument": "cube",
+          "task": "Update metadata"
+        }
+      ],
+      "extra": {}
+    },
+    {
+      "type": "ophidia",
+      "name": "Regrid VO",
+      "operator": "oph_generic",
+      "arguments": [
+        "command=/home/jovyan/work/vorticity/regrid.sh",
+        "output=/home/jovyan/work/vorticity/output/regridded_vo_@{source_file+3}",
+        "args=0:70 100:320 r880x280",
+        "description=Original inputs ua_@{source_file+3} and va_@{source_file+3}"
+      ],
+      "dependencies": [
+        {
+          "argument": "input",
+          "task": "Export VO"
+        }
+      ],
+      "extra": {}
+    },
+    {
+      "type": "ophidia",
+      "name": "Merge outputs",
+      "operator": "oph_generic",
+      "arguments": [
+        "command=/home/jovyan/work/vorticity/merge.sh",
+        "output=/home/jovyan/work/vorticity/output/both_@{source_file+3}",
+        "args=msl",
+        "description=Original inputs ua_@{source_file+3} and va_@{source_file+3}"
+      ],
+      "dependencies": [
+        {
+          "argument": "input",
+          "task": "Regrid PSL"
+        },
+        {
+          "argument": "input",
+          "task": "Regrid VO"
+        }
+      ],
+      "extra": {}
+    },
+    {
+      "type": "ophidia",
+      "name": "Destroy the temporary container",
+      "operator": "oph_deletecontainer",
+      "arguments": [
+        "container=wind_&{source}",
+        "force=yes"
+      ],
+      "dependencies": [
+        {
+          "task": "Merge outputs"
+        }
+      ],
+      "extra": {},
+      "on_error": "skip"
+    },
+    {
+      "type": "ophidia",
+      "name": "End iteration",
+      "operator": "oph_endfor",
+      "arguments": [],
+      "dependencies": [
+        {
+          "task": "Destroy the temporary container"
+        }
+      ],
+      "extra": {}
+    },
+    {
+      "type": "ophidia",
+      "name": "Destroy the work container",
+      "operator": "oph_deletecontainer",
+      "arguments": [
+        "container=wind",
+        "force=yes"
+      ],
+      "dependencies": [
+        {
+          "task": "End iteration"
+        }
+      ],
+      "extra": {},
+      "on_error": "skip"
+    }
+  ],
+  "host_partition": "partition",
+  "nthreads": "1",
+  "on_exit": "oph_fastdelete",
+  "ncores": "1"
+}
