@@ -1,6 +1,6 @@
 # Workflows for Tropical Cyclones Detection
 
-<p align="justify"> This repository includes a workflow useful to test tropical cyclone detection. </p>
+<p align="justify"> This repository includes a workflow useful to test pre-process climate data for tropical cyclone detection. </p>
 
 ## Ophidia workflow
 
