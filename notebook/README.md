@@ -1,4 +1,4 @@
-### Notebook 1 – inference_noteook.ipynb
+### Notebook 1 – inference_notebook.ipynb
 
 This notebook is designed to perform inference using the trained model for TCs detection and to apply a tracking algorithm to identify the trajectories of the detected systems. It can be used both on historical and projection data.
 
@@ -8,7 +8,7 @@ Workflow
     For first, the user specifies:  
         - `main_dir`: root directory of the project.  
         - `dataset_dir`: path to the climate dataset to be analyzed (e.g., CMIP6, NICAM, ERA5).  
-        - `model_dir`: path to the pre-trained model to be used for inference.  
+        - `run_name`: name of the pre-trained model on MLflow to be used for inference.  
         - `ibtracs_src`: path to the **IBTrACS** file used as ground truth for validation.  
         - `year`: the year on which inference will be performed.  
         - `device`: compute device (`cpu`, `cuda`, `mps`, etc.).  
@@ -17,7 +17,7 @@ Workflow
 2. Model and dataset loading
     Standard cells are provided to:  
         - Load the pre-trained model  
-        - Load the input dataset  
+        - Select and load the input dataset. For CMIP6 data the climate model and time period can be selected.  
         - Prepare the data for inference  
 
 3. Inference

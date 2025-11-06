@@ -1,7 +1,7 @@
 # Machine Learning Tropical Cyclones Detection
 
 ## Overview
-The repository provides a Machine Learning (ML) library to setup training and validation of a Tropical Cyclones (TCs) Detection model. ERA5 reanalysis and the International Best Track Archive for Climate Stewardship (IBTrACS) data are used as input and the target, respectively. Input-Output data pairs are provided as Zarr data stores.
+The repository provides a Machine Learning (ML) library to setup training and validation of a Tropical Cyclones (TCs) Detection model and run the tracking. ERA5 reanalysis and the International Best Track Archive for Climate Stewardship (IBTrACS) data are used as input and the target, respectively. Input-Output data pairs are provided as Zarr data stores.
 
 The model can use the following input drivers:
 - 10m wind gust [ $\frac{m}{s}$]
@@ -32,7 +32,9 @@ The _train.py_ script takes advantage of the Command Line Interface (CLI) to pas
 - `--devices` argument defines the number of GPU devices per node to run the training on.
 - `--num_nodes` argument defines the total number of nodes that will be used.
 
-The total number of GPUs used during the training can be evinced by simply multiplying `devices * num_nodes`.
+The total number of GPUs used during the training can be evinced by simply multiplying `devices * num_nodes`. 
+
+A bash script for the training, _train.sh_ , is also provided under the same folder. 
 
 With regards to the configuration file, it must be prepared in toml format. The configuration file is structured as follows:
 
@@ -84,6 +86,10 @@ With regards to the configuration file, it must be prepared in toml format. The 
     - drop_remainder: whether or not to drop the last batch if the number of dataset elements is not divisible by the batch size
     - accumulation_steps: number of gradient accumulation steps before calliing backward propagation
  
+### Pre-processing workflow
+
+A workflow based on PyOphidia for preparing CMIP6 data for TC detection is provided under the `workflows` folder.
+
 ## How to
 
 ### Download IBTrACS
@@ -98,6 +104,10 @@ Since the TC Detection case study relies on IBTrACS dataset, it must be download
 ### Download ERA5 data
 
 To download ERA5 data you must need a CDS account and the set of IBTrACS for which the reated ERA5 data is gathered. The script `era5_gathering.py` under `src/dataset` can be used for this purpose.
+
+## Example notebooks
+
+Example notebooks for executing and evaluating a trained ML model are provided under the `notebooks` folder.
 
 ## Python3 Environment 
 The code has been tested on Python 3.11.2 with the following dependencies:
