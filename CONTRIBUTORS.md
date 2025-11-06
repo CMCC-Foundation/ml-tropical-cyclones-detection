@@ -7,6 +7,8 @@ CMCC Developments
 - Emanuele Donno
 - Francesco Immorlano
 - Giovanni Aloisio
+- Marco De Carlo
+- Cosimo Palazzo
 
 UNITN Developments
 - Massimiliano Fronza

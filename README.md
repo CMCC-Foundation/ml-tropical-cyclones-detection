@@ -103,6 +103,7 @@ To download ERA5 data you must need a CDS account and the set of IBTrACS for whi
 The code has been tested on Python 3.11.2 with the following dependencies:
 
 - dask == 2023.7.0
+- dynamicopy
 - lightning == 2.0.9
 - mpi4py == 3.1.4
 - munch == 4.0.0
